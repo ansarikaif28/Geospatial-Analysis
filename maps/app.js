@@ -9,6 +9,12 @@ map.getPane('regionalContext').style.pointerEvents = 'none';
 map.createPane('placeLabels');
 map.getPane('placeLabels').style.zIndex = 450;
 map.getPane('placeLabels').style.pointerEvents = 'none';
+map.createPane('routeContext');
+map.getPane('routeContext').style.zIndex = 410;
+map.getPane('routeContext').style.pointerEvents = 'none';
+map.createPane('selectedRoute');
+map.getPane('selectedRoute').style.zIndex = 430;
+map.getPane('selectedRoute').style.pointerEvents = 'none';
 map.attributionControl.addAttribution('<a href="https://github.com/datameet/maps/tree/master/Districts">District boundaries adapted from DataMeet</a> (<a href="https://creativecommons.org/licenses/by/2.5/in/">CC BY 2.5 IN</a>) | <a href="https://www.naturalearthdata.com/">Natural Earth</a> context');
 function fetchJSON(url) {
   return fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
@@ -117,7 +123,7 @@ async function selectPoint(p) {
     if (version !== selectionVersion) return;
     if (!result.routes.length) { note.textContent = 'No route geometry with this habitation ID was found in the historical route layer.'; return; }
     const parts = result.routes.flatMap(r => r.parts);
-    if (parts.length) routeLayer = L.polyline(parts, {color: '#2059a6', weight: 3, opacity: .9, interactive: false}).addTo(map);
+    if (parts.length) routeLayer = L.polyline(parts, {pane: 'selectedRoute', color: '#1265be', weight: 4, opacity: .95, interactive: false}).addTo(map);
     note.textContent = duplicates.has(p[2]) || result.routes.length > 1
       ? 'Blue line: candidate route(s) matched by ID. This ID is not unique; the match to this point is uncertain.'
       : 'Blue line: historical route matched by habitation ID. It may include non-road segments and is not validated for navigation.';
@@ -144,6 +150,55 @@ document.querySelectorAll('[data-filter]').forEach(box => box.addEventListener('
   if (box.checked) filters.add(box.dataset.filter); else filters.delete(box.dataset.filter);
   pointsLayer.schedule();
 }));
+// Fetch only the paths intersecting the current view's candidate bounding boxes.
+// No sampling: if a view is too dense the server asks for a closer zoom instead.
+const pathToggle = document.querySelector('#show-paths');
+const pathStatus = document.querySelector('#path-status');
+const pathIndicator = document.querySelector('#path-indicator');
+function setPathStatus(message) { pathStatus.textContent = message; pathIndicator.textContent = message; }
+let pathContext, pathRequest, pathTimer, pathVersion = 0;
+function clearPathContext() {
+  if (pathContext) map.removeLayer(pathContext);
+  pathContext = null;
+}
+function schedulePaths() {
+  clearTimeout(pathTimer); pathVersion++;
+  if (pathRequest) pathRequest.abort();
+  clearPathContext();
+  if (!pathToggle.checked) { setPathStatus('Historical path overlay is off.'); return; }
+  if (map.getZoom() < 12) { setPathStatus('Zoom to level 12 to see recorded paths.'); return; }
+  setPathStatus('Loading nearby historical paths…');
+  const version = pathVersion;
+  pathTimer = setTimeout(async () => {
+    const b = map.getBounds();
+    if (b.getEast() - b.getWest() > 1 || b.getNorth() - b.getSouth() > 1 || b.getWest() < -180 || b.getEast() > 180 || b.getSouth() < -90 || b.getNorth() > 90) {
+      if (version === pathVersion) setPathStatus('View is too large. Zoom in to load paths.');
+      return;
+    }
+    pathRequest = new AbortController();
+    try {
+      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(7)).join(',');
+      const response = await fetch(`/api/routes-in-view?bbox=${encodeURIComponent(bbox)}`, {signal: pathRequest.signal});
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (version !== pathVersion) return;
+      if (result.status === 'zoom_in') {
+        setPathStatus(`Too many paths in view (${count(result.candidate_count)} candidates). Zoom in; none drawn yet.`);
+        return;
+      }
+      if (result.parts.length) pathContext = L.polyline(result.parts, {pane: 'routeContext', color: '#546b74', weight: 2, opacity: .58, interactive: false}).addTo(map);
+      setPathStatus(result.candidate_count
+        ? `${count(result.candidate_count)} path bounding-box candidates loaded; some may lie outside the view.`
+        : 'No historical paths found in this view.');
+    } catch (err) {
+      if (err.name !== 'AbortError' && version === pathVersion) setPathStatus(`Could not load historical paths: ${err.message}`);
+    }
+  }, 250);
+}
+map.on('movestart', () => { pathVersion++; clearTimeout(pathTimer); if (pathRequest) pathRequest.abort(); clearPathContext(); if (pathToggle.checked) setPathStatus('Updating path overlay…'); });
+map.on('moveend', schedulePaths);
+pathToggle.addEventListener('change', schedulePaths);
+schedulePaths();
 function choosePoint(p) {
   if (!filters.has(p[3])) { filters.add(p[3]); document.querySelector(`[data-filter="${p[3]}"]`).checked = true; }
   map.setView([p[0], p[1]], 14); selectPoint(p);

@@ -19,6 +19,8 @@ class HistoricalMapTests(unittest.TestCase):
     def setUpClass(cls):
         app.POINTS = app.load_points()
         app.ROUTES = app.load_routes()
+        app.ROUTE_BOUNDS = app.load_route_bounds()
+        app.ROUTE_WGS_BOUNDS = app.route_wgs_bounds()
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -62,8 +64,21 @@ class HistoricalMapTests(unittest.TestCase):
         self.assertTrue(15 < routes[0]['parts'][0][0][0] < 23)
         self.assertEqual(self.get_json('/api/route?hab_id=1237684')['routes'], [])
 
+    def test_viewport_routes(self):
+        result = self.get_json('/api/routes-in-view?bbox=73.85,16.02,73.90,16.05')
+        self.assertEqual(result['status'], 'ok')
+        self.assertGreater(result['candidate_count'], 0)
+        route = self.get_json('/api/route?hab_id=1230307')['routes'][0]
+        self.assertIn(route['parts'][0], result['parts'])
+        crowded = self.get_json('/api/routes-in-view?bbox=73.5,15.7,74.5,16.7')
+        self.assertEqual(crowded['status'], 'zoom_in')
+        self.assertEqual(crowded['parts'], [])
+        self.assertGreater(crowded['candidate_count'], 400)
+        empty = self.get_json('/api/routes-in-view?bbox=1,1,1.1,1.1')
+        self.assertEqual(empty['candidate_count'], 0)
+
     def test_endpoint_validation(self):
-        for path, status in [('/api/route?hab_id=invalid', 400), ('/../README.md', 404)]:
+        for path, status in [('/api/route?hab_id=invalid', 400), ('/api/routes-in-view?bbox=NaN,1,2,3', 400), ('/api/routes-in-view?bbox=1,1,4,4', 400), ('/api/routes-in-view?bbox=2,1,1,2', 400), ('/../README.md', 404)]:
             with self.assertRaises(HTTPError) as error:
                 urlopen(self.base + path)
             self.assertEqual(error.exception.code, status)

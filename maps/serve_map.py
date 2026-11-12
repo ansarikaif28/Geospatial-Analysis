@@ -70,6 +70,37 @@ def load_routes():
     return indices
 
 
+def route_parts(shape, project):
+    ends = list(shape.parts) + [len(shape.points)]
+    parts = []
+    for start, end in zip(ends, ends[1:]):
+        points = shape.points[start:end]
+        if len(points) < 2:
+            continue
+        xs, ys = zip(*[(p[0], p[1]) for p in points])
+        lons, lats = project.transform(xs, ys)
+        parts.append([[round(lat, 6), round(lon, 6)] for lon, lat in zip(lons, lats)])
+    return parts
+
+
+def load_route_bounds():
+    reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
+    bounds = []
+    for i, shape in enumerate(reader.iterShapes()):
+        if shape.shapeType != shapefile.NULL and getattr(shape, 'bbox', None):
+            bounds.append((i, *shape.bbox, len(shape.points)))
+    reader.close()
+    return bounds
+
+
+def route_wgs_bounds():
+    # A padded geographic envelope avoids projecting unrelated world views.
+    reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
+    extent = transformer('shortest_road_paths').transform_bounds(*reader.bbox, densify_pts=100)
+    reader.close()
+    return extent[0] - 0.1, extent[1] - 0.1, extent[2] + 0.1, extent[3] + 0.1
+
+
 @lru_cache(maxsize=256)
 def route_for(hid):
     reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
@@ -77,19 +108,52 @@ def route_for(hid):
     routes = []
     for i in ROUTES.get(hid, []):
         item = reader.shapeRecord(i)
-        shape = item.shape
-        ends = list(shape.parts) + [len(shape.points)]
-        parts = []
-        for start, end in zip(ends, ends[1:]):
-            points = shape.points[start:end]
-            if len(points) < 2:
-                continue
-            xs, ys = zip(*[(p[0], p[1]) for p in points])
-            lons, lats = project.transform(xs, ys)
-            parts.append([[round(lat, 6), round(lon, 6)] for lon, lat in zip(lons, lats)])
-        routes.append({'facility': str(item.record.FACILITY_I), 'distance': number(item.record.path_len_m), 'parts': parts})
+        routes.append({'facility': str(item.record.FACILITY_I), 'distance': number(item.record.path_len_m),
+                       'parts': route_parts(item.shape, project)})
     reader.close()
     return json.dumps({'routes': routes}, separators=(',', ':'), allow_nan=False).encode()
+
+
+def routes_in_view(bbox):
+    """Return unsimplified historical paths whose projected bounding boxes intersect the view.
+
+    Bounding-box candidates may include lines outside the view. Refuse oversized
+    responses rather than silently sampling or misrepresenting coverage.
+    """
+    west, south, east, north = bbox
+    route_west, route_south, route_east, route_north = ROUTE_WGS_BOUNDS
+    if east < route_west or west > route_east or north < route_south or south > route_north:
+        return {'status': 'ok', 'candidate_count': 0, 'parts': []}
+    west, south = max(west, route_west), max(south, route_south)
+    east, north = min(east, route_east), min(north, route_north)
+    project_crs = CRS.from_wkt((DATA / 'shortest_road_paths.prj').read_text())
+    to_projected = Transformer.from_crs('EPSG:4326', project_crs, always_xy=True)
+    left, bottom, right, top = to_projected.transform_bounds(west, south, east, north, densify_pts=21)
+    candidates = [row for row in ROUTE_BOUNDS if row[3] >= left and row[1] <= right and row[4] >= bottom and row[2] <= top]
+    if len(candidates) > 400 or sum(row[5] for row in candidates) > 100000:
+        return {'status': 'zoom_in', 'candidate_count': len(candidates), 'parts': []}
+    reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
+    project = transformer('shortest_road_paths')
+    parts = []
+    for row in candidates:
+        parts.extend(route_parts(reader.shape(row[0]), project))
+    reader.close()
+    return {'status': 'ok', 'candidate_count': len(candidates), 'parts': parts}
+
+
+def parse_bbox(value):
+    try:
+        values = [float(v) for v in value.split(',')]
+        if len(values) != 4 or not all(math.isfinite(v) for v in values):
+            raise ValueError
+        west, south, east, north = values
+        if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+            raise ValueError
+        if east - west > 1 or north - south > 1:
+            raise ValueError
+        return values
+    except ValueError:
+        raise ValueError('Expected west,south,east,north with spans at most 1 degree') from None
 
 
 FILES = {
@@ -113,6 +177,14 @@ class Handler(BaseHTTPRequestHandler):
             payload = (HERE / name).read_bytes()
         elif url.path == '/api/habitations':
             payload, content_type = POINTS, 'application/json; charset=utf-8'
+        elif url.path == '/api/routes-in-view':
+            try:
+                bbox = parse_bbox(parse_qs(url.query).get('bbox', [''])[0])
+            except ValueError as exc:
+                self.send_error(400, str(exc))
+                return
+            payload = json.dumps(routes_in_view(bbox), separators=(',', ':'), allow_nan=False).encode()
+            content_type = 'application/json; charset=utf-8'
         elif url.path == '/api/route':
             hid = parse_qs(url.query).get('hab_id', [''])[0]
             if not hid.isascii() or not hid.isdigit() or len(hid) > 18:
@@ -128,7 +200,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Cache-Control', 'no-store')
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 
 def main():
@@ -136,9 +211,11 @@ def main():
     parser.add_argument('--host', default='127.0.0.1', help='bind address (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=8000)
     args = parser.parse_args()
-    global POINTS, ROUTES
+    global POINTS, ROUTES, ROUTE_BOUNDS, ROUTE_WGS_BOUNDS
     POINTS = load_points()
     ROUTES = load_routes()
+    ROUTE_BOUNDS = load_route_bounds()
+    ROUTE_WGS_BOUNDS = route_wgs_bounds()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f'Historical map ready at http://{args.host}:{server.server_port}/', flush=True)
     try:

@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#123b36">
   <link rel="icon" href="data:,">
   <title>Maharashtra Healthcare Access | Historical network explorer</title>
-  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=4">
-  <link rel="stylesheet" href="/style.css?v=4">
-  <script src="/vendor/leaflet/leaflet.js?v=4" defer></script>
-  <script src="/districts.js?v=4" defer></script>
-  <script src="/app.js?v=4" defer></script>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=5">
+  <link rel="stylesheet" href="/style.css?v=5">
+  <script src="/vendor/leaflet/leaflet.js?v=5" defer></script>
+  <script src="/districts.js?v=5" defer></script>
+  <script src="/app.js?v=5" defer></script>
 </head>
 <body>
   <div class="app">
@@ -53,12 +53,22 @@
         </div>
         <p class="unassigned"><strong id="unassigned-count">—</strong> records fall outside, or could not be uniquely assigned to, these historical district boundaries.</p>
       </section>
+
+      <section aria-labelledby="routes-title">
+        <div class="section-head"><h2 id="routes-title">NETWORK &amp; ROUTES</h2><span>04 / LAYERS</span></div>
+        <label class="path-toggle"><input id="show-paths" type="checkbox" checked> <span>Nearby historical paths</span></label>
+        <p id="path-status" class="path-status" role="status">Zoom in to load nearby historical paths.</p>
+        <div class="route-legend"><span><i></i> Recorded path geometry</span><span><i></i> Selected habitation's path</span></div>
+        <p class="legend-note">Paths are an incomplete subset of an older analysis, not the full road network. Some may contain non-road connectors. Not for navigation.</p>
+        <div class="notice proposal-notice"><strong>Proposed facilities unavailable</strong> · The notebook's proposed-facility and proposal-route outputs have not been found, so they are not shown.</div>
+      </section>
       <div class="sidebar-footer">5 km is a distance threshold, not a measure of service quality. <a href="https://github.com/ansarikaif28/Geospatial-Analysis" target="_blank" rel="noopener noreferrer">Project repository ↗</a></div>
     </aside>
     <main class="map-area">
       <div id="map" aria-label="Interactive map of historical habitation paths"></div>
       <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong><small>2011 DISTRICTS · NO EXTERNAL TILES</small></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
       <div id="loading" class="loading" role="status">Loading historical shapefiles…</div>
+      <div id="path-indicator" class="path-indicator" aria-hidden="true"></div>
       <div id="selection" class="selection" hidden aria-live="polite"></div>
       <div class="map-caption"><span class="caption-dot"></span> HISTORICAL DATA <span class="separator">/</span> <span id="visible-count">Loading…</span></div>
     </main>
