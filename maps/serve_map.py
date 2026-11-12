@@ -66,8 +66,8 @@ def load_facilities():
     for suffix, expected in reference['route_sha256'].items():
         if hashlib.sha256(stem.with_suffix('.' + suffix).read_bytes()).hexdigest() != expected:
             raise ValueError('Historical routes changed; rebuild facility-reference.json before starting the map')
-    return json.dumps({'facilities': reference['facilities'], 'stats': reference['stats']},
-                      ensure_ascii=False, separators=(',', ':')).encode()
+    return (json.dumps({'facilities': reference['facilities'], 'stats': reference['stats']},
+                       ensure_ascii=False, separators=(',', ':')).encode(), set(reference['route_indices']))
 
 
 def load_routes():
@@ -97,7 +97,7 @@ def load_route_bounds():
     reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
     bounds = []
     for i, shape in enumerate(reader.iterShapes()):
-        if shape.shapeType != shapefile.NULL and getattr(shape, 'bbox', None):
+        if i in ALLOWED_ROUTES and shape.shapeType != shapefile.NULL and getattr(shape, 'bbox', None):
             bounds.append((i, *shape.bbox, len(shape.points)))
     reader.close()
     return bounds
@@ -116,16 +116,19 @@ def route_for(hid):
     reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
     project = transformer('shortest_road_paths')
     routes = []
-    for i in ROUTES.get(hid, []):
+    matches = ROUTES.get(hid, [])
+    for i in matches:
+        if i not in ALLOWED_ROUTES:
+            continue
         item = reader.shapeRecord(i)
         routes.append({'facility': str(item.record.FACILITY_I), 'distance': number(item.record.path_len_m),
                        'parts': route_parts(item.shape, project)})
     reader.close()
-    return json.dumps({'routes': routes}, separators=(',', ':'), allow_nan=False).encode()
+    return json.dumps({'routes': routes, 'excluded_count': sum(i not in ALLOWED_ROUTES for i in matches)}, separators=(',', ':'), allow_nan=False).encode()
 
 
 def routes_in_view(bbox):
-    """Return unsimplified historical paths whose projected bounding boxes intersect the view.
+    """Return unsimplified screened-destination paths whose projected bounding boxes intersect the view.
 
     Bounding-box candidates may include lines outside the view. Refuse oversized
     responses rather than silently sampling or misrepresenting coverage.
@@ -223,9 +226,9 @@ def main():
     parser.add_argument('--host', default='127.0.0.1', help='bind address (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=8000)
     args = parser.parse_args()
-    global POINTS, FACILITIES, ROUTES, ROUTE_BOUNDS, ROUTE_WGS_BOUNDS
+    global POINTS, FACILITIES, ALLOWED_ROUTES, ROUTES, ROUTE_BOUNDS, ROUTE_WGS_BOUNDS
     POINTS = load_points()
-    FACILITIES = load_facilities()
+    FACILITIES, ALLOWED_ROUTES = load_facilities()
     ROUTES = load_routes()
     ROUTE_BOUNDS = load_route_bounds()
     ROUTE_WGS_BOUNDS = route_wgs_bounds()

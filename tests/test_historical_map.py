@@ -12,13 +12,16 @@ from urllib.request import urlopen
 spec = importlib.util.spec_from_file_location('historical_map', Path(__file__).resolve().parents[1] / 'maps' / 'serve_map.py')
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
+reference_spec = importlib.util.spec_from_file_location('facility_reference', Path(__file__).resolve().parents[1] / 'maps' / 'prepare_facility_reference.py')
+reference = importlib.util.module_from_spec(reference_spec)
+reference_spec.loader.exec_module(reference)
 
 
 class HistoricalMapTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         app.POINTS = app.load_points()
-        app.FACILITIES = app.load_facilities()
+        app.FACILITIES, app.ALLOWED_ROUTES = app.load_facilities()
         app.ROUTES = app.load_routes()
         app.ROUTE_BOUNDS = app.load_route_bounds()
         app.ROUTE_WGS_BOUNDS = app.route_wgs_bounds()
@@ -57,36 +60,56 @@ class HistoricalMapTests(unittest.TestCase):
         self.assertEqual(Counter(p[3] for p in pune), {'within': 2416, 'beyond': 89, 'missing': 4705})
 
     def test_route_and_missing_route(self):
-        routes = self.get_json('/api/route?hab_id=1230307')['routes']
-        self.assertEqual(len(routes), 1)
-        self.assertEqual(routes[0]['facility'], '480452')
-        self.assertAlmostEqual(routes[0]['distance'], 577.2580695618639)
-        self.assertTrue(routes[0]['parts'])
-        self.assertTrue(15 < routes[0]['parts'][0][0][0] < 23)
-        self.assertEqual(self.get_json('/api/route?hab_id=1237684')['routes'], [])
+        result = self.get_json('/api/route?hab_id=323461')
+        self.assertEqual(len(result['routes']), 1)
+        route = result['routes'][0]
+        self.assertEqual(route['facility'], '363830')
+        self.assertAlmostEqual(route['distance'], 437.66429945566114)
+        self.assertTrue(route['parts'])
+        self.assertEqual(result['excluded_count'], 0)
+        excluded = self.get_json('/api/route?hab_id=1230307')
+        self.assertEqual(excluded['routes'], [])
+        self.assertEqual(excluded['excluded_count'], 1)
+        self.assertEqual(self.get_json('/api/route?hab_id=1237684'), {'routes': [], 'excluded_count': 0})
+
+    def test_medical_description_screen(self):
+        for name in ['Primary Health Centre', 'PHC sub center', 'Prathmik Arogya Kendra']:
+            self.assertTrue(reference.human_medical_candidate(name, 'Medical'))
+        for name, category in [('Veterinary hospital', 'Medical'), ('Animal health center', 'Medical'),
+                               ('Pashu Arogya Kendra', 'Medical'), ('PHC veterinary', 'Medical'),
+                               ('Gram panchayat', 'Medical'), ('PHC', 'Education')]:
+            self.assertFalse(reference.human_medical_candidate(name, category))
 
     def test_facility_reference(self):
         data = self.get_json('/api/facilities')
         self.assertEqual(data['stats']['matched_routes'], 51502)
         self.assertEqual(data['stats']['unmatched_or_ambiguous_routes'], 4)
-        self.assertEqual(data['stats']['medical_destinations'], 2084)
-        self.assertEqual(data['stats']['other_destinations'], 30362)
+        self.assertEqual(data['stats']['medical_candidates'], 1036)
+        self.assertEqual(data['stats']['medical_candidate_routes'], 1774)
         matched = {f[2]: f for f in data['facilities']}
-        self.assertEqual(matched['480452'][3:], ['Grampanchayat Keravade k narur', 'Transport/Admin'])
-        self.assertEqual(len(matched), 32446)
+        self.assertNotIn('480452', matched)
+        self.assertNotIn('138877', matched)  # veterinary hospital in Medical category
+        self.assertEqual(len(matched), 1036)
+        self.assertTrue(all(f[4].casefold() == 'medical' for f in matched.values()))
+        self.assertEqual(len(app.ROUTE_BOUNDS), 1774)
 
     def test_viewport_routes(self):
-        result = self.get_json('/api/routes-in-view?bbox=73.85,16.02,73.90,16.05')
+        route = self.get_json('/api/route?hab_id=323461')['routes'][0]
+        lat, lon = route['parts'][0][0]
+        bbox = f'{lon-.03},{lat-.03},{lon+.03},{lat+.03}'
+        result = self.get_json('/api/routes-in-view?bbox=' + bbox)
         self.assertEqual(result['status'], 'ok')
         self.assertGreater(result['candidate_count'], 0)
-        route = self.get_json('/api/route?hab_id=1230307')['routes'][0]
         self.assertIn(route['parts'][0], result['parts'])
-        crowded = self.get_json('/api/routes-in-view?bbox=73.5,15.7,74.5,16.7')
-        self.assertEqual(crowded['status'], 'zoom_in')
-        self.assertEqual(crowded['parts'], [])
-        self.assertGreater(crowded['candidate_count'], 400)
         empty = self.get_json('/api/routes-in-view?bbox=1,1,1.1,1.1')
         self.assertEqual(empty['candidate_count'], 0)
+        # Dense views must be refused rather than silently sampled.
+        original = app.ROUTE_BOUNDS
+        try:
+            app.ROUTE_BOUNDS = [original[0]] * 401
+            self.assertEqual(app.routes_in_view([lon-.03, lat-.03, lon+.03, lat+.03])['status'], 'zoom_in')
+        finally:
+            app.ROUTE_BOUNDS = original
 
     def test_endpoint_validation(self):
         for path, status in [('/api/route?hab_id=invalid', 400), ('/api/routes-in-view?bbox=NaN,1,2,3', 400), ('/api/routes-in-view?bbox=1,1,4,4', 400), ('/api/routes-in-view?bbox=2,1,1,2', 400), ('/../README.md', 404)]:

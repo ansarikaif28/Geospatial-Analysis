@@ -74,32 +74,32 @@ const PointsLayer = L.Layer.extend({
       if (x < -5 || x > size.x + 5 || y < -5 || y > size.y + 5) continue;
       groups[p[3]].push([x, y]); visible.push([x, y, p]);
     }
-    // Diamond habitation symbols retain the status colors and remain legible on the choropleth.
-    const radius = this.map.getZoom() >= 14 ? 5 : 3.5;
+    // Small house glyphs use a white outline and status-colored fill.
+    const radius = this.map.getZoom() >= 14 ? 5.5 : 4;
     for (const key of Object.keys(groups)) {
-      ctx.fillStyle = colors[key]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.globalAlpha = .95; ctx.beginPath();
-      for (const [x, y] of groups[key]) { ctx.moveTo(x, y - radius); ctx.lineTo(x + radius, y); ctx.lineTo(x, y + radius); ctx.lineTo(x - radius, y); ctx.closePath(); }
+      ctx.fillStyle = colors[key]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.globalAlpha = .95; ctx.beginPath();
+      for (const [x, y] of groups[key]) {
+        ctx.moveTo(x - radius, y - radius * .1); ctx.lineTo(x, y - radius);
+        ctx.lineTo(x + radius, y - radius * .1); ctx.lineTo(x + radius * .8, y - radius * .1);
+        ctx.lineTo(x + radius * .8, y + radius * .8); ctx.lineTo(x - radius * .8, y + radius * .8);
+        ctx.lineTo(x - radius * .8, y - radius * .1); ctx.closePath();
+      }
       ctx.fill(); ctx.stroke();
     }
-    if (this.map.getZoom() >= 12) {
-      const showMedical = document.querySelector('#show-medical').checked;
-      const showOther = document.querySelector('#show-other').checked;
+    if (this.map.getZoom() >= 12 && document.querySelector('#show-medical').checked) {
       for (const f of facilities) {
-        const medical = f[4].toLowerCase() === 'medical';
-        if (!(medical ? showMedical : showOther)) continue;
         const x = f.world.x * scale - bounds.min.x, y = f.world.y * scale - bounds.min.y;
         if (x < -8 || x > size.x + 8 || y < -8 || y > size.y + 8) continue;
         visibleFacilities.push([x, y, f]);
-        ctx.globalAlpha = .95; ctx.fillStyle = medical ? '#67428b' : '#576b80'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3;
+        ctx.globalAlpha = .95; ctx.fillStyle = '#67428b'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3;
         ctx.beginPath(); ctx.rect(x - 5, y - 5, 10, 10); ctx.fill(); ctx.stroke();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath();
-        ctx.moveTo(x - 2.5, y); ctx.lineTo(x + 2.5, y);
-        if (medical) { ctx.moveTo(x, y - 2.5); ctx.lineTo(x, y + 2.5); }
+        ctx.moveTo(x - 2.5, y); ctx.lineTo(x + 2.5, y); ctx.moveTo(x, y - 2.5); ctx.lineTo(x, y + 2.5);
         ctx.stroke();
       }
     }
     ctx.globalAlpha = 1;
-    document.querySelector('#visible-count').textContent = `${count(visible.length)} habitations · ${count(visibleFacilities.length)} destinations shown`;
+    document.querySelector('#visible-count').textContent = `${count(visible.length)} habitations · ${count(visibleFacilities.length)} medical candidates shown`;
   }
 });
 const pointsLayer = new PointsLayer().addTo(map);
@@ -120,15 +120,14 @@ function facilityAt(location) {
   return closest;
 }
 function facilityIcon(f) {
-  const medical = f[4].toLowerCase() === 'medical';
-  return L.divIcon({className: 'destination-icon', html: `<span class="destination-symbol ${medical ? 'medical' : 'other'}">${medical ? '+' : '−'}</span>`, iconSize: [18, 18], iconAnchor: [9, 9]});
+  return L.divIcon({className: 'destination-icon', html: '<span class="destination-symbol medical">+</span>', iconSize: [18, 18], iconAnchor: [9, 9]});
 }
 function selectFacility(f) {
   clearSelection(); selection.hidden = false;
   const dl = document.createElement('dl');
   detail(dl, 'Facility ID', f[2]); detail(dl, 'Source category', f[4] || 'Not recorded');
   selection.replaceChildren(closeButton(), text('div', 'MATCHED HISTORICAL DESTINATION', 'eyebrow'), text('h3', f[3] || 'Unnamed destination'), dl,
-    text('p', 'Matched by facility ID and route endpoint to PMGSY source data. Category and name are source attributes, not a validation of healthcare service. Not a proposed facility.'));
+    text('p', 'Matched by ID and route endpoint to a conservatively screened PMGSY medical record. Its service and current status are not verified. Not a proposed facility.'));
   destinationMarker = L.marker([f[0], f[1]], {icon: facilityIcon(f), interactive: false}).addTo(map);
 }
 function text(tag, value, className) {
@@ -152,24 +151,24 @@ async function selectPoint(p) {
   clearSelection(); const version = selectionVersion; selection.hidden = false;
   const dl = document.createElement('dl');
   detail(dl, 'District (2011)', districtName(p[8]));
-  detail(dl, 'Habitation ID', p[2]); detail(dl, 'Recorded status', labels[p[3]]);
-  detail(dl, 'Recorded distance', distance(p[4])); detail(dl, 'Facility ID', p[5] || 'Not recorded');
+  detail(dl, 'Habitation ID', p[2]); detail(dl, 'Original status (all destinations)', labels[p[3]]);
+  detail(dl, 'Original distance', distance(p[4])); detail(dl, 'Original destination ID', p[5] || 'Not recorded');
   if (p[6]) detail(dl, 'Reason', p[6]);
   const note = text('p', 'Looking for a matching historical route…');
   selection.replaceChildren(closeButton(), text('div', 'SELECTED HABITATION', 'eyebrow'), text('h3', p[7] || 'Unnamed habitation'), dl, note);
-  selectionMarker = L.marker([p[0], p[1]], {icon: L.divIcon({className: 'habitation-selected', html: '<span></span>', iconSize: [17, 17], iconAnchor: [8, 8]}), interactive: false}).addTo(map);
+  selectionMarker = L.marker([p[0], p[1]], {icon: L.divIcon({className: 'habitation-selected', html: '<span>⌂</span>', iconSize: [22, 22], iconAnchor: [11, 11]}), interactive: false}).addTo(map);
   try {
     const result = await fetchJSON(`/api/route?hab_id=${encodeURIComponent(p[2])}`);
     if (version !== selectionVersion) return;
-    if (!result.routes.length) { note.textContent = 'No route geometry with this habitation ID was found in the historical route layer.'; return; }
+    if (!result.routes.length) { note.textContent = result.excluded_count ? 'The recorded route is hidden: its destination was not confidently identified as a human medical center. Original status and distance above are unfiltered.' : 'No route geometry with this habitation ID was found in the historical route layer.'; return; }
     const route = result.routes[0];
-    const destination = !duplicates.has(p[2]) && result.routes.length === 1 && route.facility === p[5] ? facilitiesById.get(route.facility) : null;
+    const destination = !duplicates.has(p[2]) && result.routes.length === 1 && !result.excluded_count && route.facility === p[5] ? facilitiesById.get(route.facility) : null;
     if (destination) destinationMarker = L.marker([destination[0], destination[1]], {icon: facilityIcon(destination), interactive: false}).addTo(map);
     const parts = result.routes.flatMap(r => r.parts);
     if (parts.length) routeLayer = L.polyline(parts, {pane: 'selectedRoute', color: '#1265be', weight: 4, opacity: .95, interactive: false}).addTo(map);
-    note.textContent = duplicates.has(p[2]) || result.routes.length > 1
-      ? 'Blue line: candidate route(s) matched by ID. This ID is not unique; the match to this point is uncertain.'
-      : `Blue line: historical route matched by habitation ID.${destination ? ` Destination matched to PMGSY: ${destination[3] || 'Unnamed'} (${destination[4] || 'category unknown'}); not necessarily a healthcare facility.` : ' Destination location not independently matched.'} Routes may include non-road segments and are not validated for navigation.`;
+    note.textContent = duplicates.has(p[2]) || result.routes.length > 1 || result.excluded_count
+      ? 'Blue line: candidate medical-destination route(s) matched by ID. Multiple matches or excluded routes make the match to this point uncertain.'
+      : `Blue line: historical route matched by habitation ID.${destination ? ` Screened medical destination: ${destination[3] || 'Unnamed'}; service and current status are unverified.` : ' Destination match is uncertain.'} Routes may include non-road segments and are not validated for navigation.`;
   } catch (err) { if (version === selectionVersion) note.textContent = `Could not load route: ${err.message}`; }
 }
 function selectDistrict(id, zoom = false) {
@@ -184,12 +183,12 @@ function selectDistrict(id, zoom = false) {
   const zoomButton = text('button', 'Zoom to district', 'group-zoom'); zoomButton.type = 'button';
   zoomButton.addEventListener('click', () => map.fitBounds(d.layer.getBounds(), {padding: [20, 20], maxZoom: 11}));
   selection.replaceChildren(closeButton(), text('div', '2011 DISTRICT SUMMARY', 'eyebrow'), text('h3', d.name), dl, zoomButton,
-    text('p', 'Counts include all assigned records, regardless of point filters. No path is not proof of inaccessibility. Boundaries are historical and generalized; not for navigation.'));
+    text('p', 'Counts include all assigned records and original destinations, including non-medical ones, regardless of point filters. No path is not proof of inaccessibility. Boundaries are historical and generalized; not for navigation.'));
   if (zoom) map.fitBounds(d.layer.getBounds(), {padding: [20, 20], maxZoom: 11});
   updateSearch();
 }
 map.on('click', event => { const f = facilityAt(event.containerPoint), p = pointAt(event.containerPoint); if (f) selectFacility(f); else if (p) selectPoint(p); });
-for (const id of ['show-medical', 'show-other']) document.querySelector(`#${id}`).addEventListener('change', () => pointsLayer.schedule());
+document.querySelector('#show-medical').addEventListener('change', () => pointsLayer.schedule());
 document.querySelectorAll('[data-filter]').forEach(box => box.addEventListener('change', () => {
   if (box.checked) filters.add(box.dataset.filter); else filters.delete(box.dataset.filter);
   pointsLayer.schedule();
@@ -211,7 +210,7 @@ function schedulePaths() {
   clearPathContext();
   if (!pathToggle.checked) { setPathStatus('Historical path overlay is off.'); return; }
   if (map.getZoom() < 12) { setPathStatus('Zoom to level 12 to see recorded paths.'); return; }
-  setPathStatus('Loading nearby historical paths…');
+  setPathStatus('Loading nearby screened medical-destination paths…');
   const version = pathVersion;
   pathTimer = setTimeout(async () => {
     const b = map.getBounds();
@@ -233,9 +232,9 @@ function schedulePaths() {
       if (result.parts.length) pathContext = L.polyline(result.parts, {pane: 'routeContext', color: '#546b74', weight: 2, opacity: .58, interactive: false}).addTo(map);
       setPathStatus(result.candidate_count
         ? `${count(result.candidate_count)} path bounding-box candidates loaded; some may lie outside the view.`
-        : 'No historical paths found in this view.');
+        : 'No screened medical-destination paths found in this view.');
     } catch (err) {
-      if (err.name !== 'AbortError' && version === pathVersion) setPathStatus(`Could not load historical paths: ${err.message}`);
+      if (err.name !== 'AbortError' && version === pathVersion) setPathStatus(`Could not load screened medical-destination paths: ${err.message}`);
     }
   }, 250);
 }
