@@ -3,25 +3,21 @@
 const colors = {within: '#38886f', beyond: '#dc9955', missing: '#b55b57', unknown: '#8494a3'};
 const labels = {within: 'Within 5 km', beyond: 'Beyond 5 km', missing: 'No path found', unknown: 'Distance unavailable'};
 const map = L.map('map', {zoomControl: true, preferCanvas: true, maxZoom: 19}).setView([19.2, 76.5], 7);
-// Bundled, generalized Natural Earth context: no remote map tile requests.
 map.createPane('regionalContext');
 map.getPane('regionalContext').style.zIndex = 250;
 map.getPane('regionalContext').style.pointerEvents = 'none';
 map.createPane('placeLabels');
 map.getPane('placeLabels').style.zIndex = 450;
 map.getPane('placeLabels').style.pointerEvents = 'none';
-map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a> regional context');
-fetch('/regional-context.geojson?v=3').then(r => {
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}).then(data => L.geoJSON(data, {
+map.attributionControl.addAttribution('<a href="https://github.com/datameet/maps/tree/master/Districts">District boundaries adapted from DataMeet</a> (<a href="https://creativecommons.org/licenses/by/2.5/in/">CC BY 2.5 IN</a>) | <a href="https://www.naturalearthdata.com/">Natural Earth</a> context');
+function fetchJSON(url) {
+  return fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+}
+fetchJSON('/regional-context.geojson?v=4').then(data => L.geoJSON(data, {
   pane: 'regionalContext', interactive: false,
-  style: feature => ({color: feature.properties.name === 'Maharashtra' ? '#7f9889' : '#b8c7bb', weight: feature.properties.name === 'Maharashtra' ? 1.5 : 0.8, fillColor: feature.properties.name === 'Maharashtra' ? '#dbe7db' : '#e8ede4', fillOpacity: 0.8})
+  style: f => ({color: f.properties.name === 'Maharashtra' ? '#7f9889' : '#b8c7bb', weight: 0.8, fillColor: '#e8ede4', fillOpacity: 0.8})
 }).addTo(map)).catch(err => console.error('Regional context unavailable:', err));
-fetch('/regional-places.geojson?v=3').then(r => {
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}).then(data => {
+fetchJSON('/regional-places.geojson?v=4').then(data => {
   for (const f of data.features) {
     const [lon, lat] = f.geometry.coordinates;
     const label = document.createElement('span'); label.textContent = f.properties.name;
@@ -29,77 +25,69 @@ fetch('/regional-places.geojson?v=3').then(r => {
       icon: L.divIcon({className: 'place-label', html: label.outerHTML, iconSize: [100, 16], iconAnchor: [0, 8]})}).addTo(map);
   }
 }).catch(err => console.error('Place labels unavailable:', err));
-const defaultView = () => map.setView([19.2, 76.5], 7);
-document.querySelector('#reset').addEventListener('click', defaultView);
+document.querySelector('#reset').addEventListener('click', () => map.setView([19.2, 76.5], 7));
 const filters = new Set(Object.keys(colors));
-let points = [], visible = [], duplicates = new Set(), selectionMarker, routeLayer, selectionVersion = 0;
+let points = [], visible = [], duplicates = new Set(), districtsById = new Map(), districtStats = new Map();
+let districtLayer, selectionMarker, routeLayer, selectionVersion = 0;
 const loading = document.querySelector('#loading');
 const selection = document.querySelector('#selection');
+const districtSelect = document.querySelector('#district');
+const search = document.querySelector('#search');
+const results = document.querySelector('#search-results');
 const count = n => n.toLocaleString('en-IN');
 const distance = n => n == null ? 'Not recorded' : `${(n / 1000).toFixed(2)} km`;
+const districtName = id => districtsById.get(id)?.name || 'Outside / unassigned';
 
-// A single canvas keeps tens of thousands of historical points responsive.
+// Points are only drawn at close zoom, avoiding state-wide overplotting.
 const PointsLayer = L.Layer.extend({
   onAdd(m) {
     this.map = m;
     this.canvas = L.DomUtil.create('canvas', 'historical-points leaflet-layer');
     m.getPanes().overlayPane.appendChild(this.canvas);
-    m.on('move zoom resize', this.schedule, this);
-    this.schedule();
+    m.on('move zoom resize', this.schedule, this); this.schedule();
   },
   onRemove(m) {
-    m.off('move zoom resize', this.schedule, this);
-    L.DomUtil.remove(this.canvas);
+    m.off('move zoom resize', this.schedule, this); L.DomUtil.remove(this.canvas);
     if (this.frame) cancelAnimationFrame(this.frame);
   },
-  schedule() {
-    if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = null; this.draw(); });
-  },
+  schedule() { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = null; this.draw(); }); },
   draw() {
     const size = this.map.getSize(), ratio = window.devicePixelRatio || 1;
     this.canvas.width = Math.round(size.x * ratio); this.canvas.height = Math.round(size.y * ratio);
     this.canvas.style.width = `${size.x}px`; this.canvas.style.height = `${size.y}px`;
     L.DomUtil.setPosition(this.canvas, this.map.containerPointToLayerPoint([0, 0]));
-    const ctx = this.canvas.getContext('2d'); ctx.scale(ratio, ratio);
-    const bounds = this.map.getPixelBounds(), scale = this.map.getZoomScale(this.map.getZoom(), 0);
-    // Hexagons are anchored in world-pixel space, so they do not regroup on pan.
-    const cells = MapClusters.groupPoints(points, filters, scale, bounds, size, 26);
-    visible = [];
-    const ramp = ['#69a891', '#a5c4a2', '#e2ca8d', '#dca07f', '#bc6d68'];
-    for (const cell of cells) {
-      const n = cell.points.length;
-      const radius = n === 1 ? 4 : 25;
-      visible.push({...cell, radius});
-      ctx.beginPath();
-      if (n === 1) {
-        ctx.arc(cell.x, cell.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = colors[cell.points[0][3]];
-      } else {
-        // Percentage of the currently filtered records that have no recorded path.
-        const share = cell.counts.missing / n;
-        const step = share === 0 ? 0 : Math.min(4, Math.ceil(share * 4));
-        ctx.fillStyle = ramp[step];
-        for (let i = 0; i < 6; i++) {
-          const angle = (60 * i - 30) * Math.PI / 180;
-          const x = cell.x + radius * Math.cos(angle), y = cell.y + radius * Math.sin(angle);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-      }
-      ctx.globalAlpha = 0.96; ctx.fill(); ctx.globalAlpha = 1;
-      ctx.strokeStyle = '#f7faf3'; ctx.lineWidth = n === 1 ? 1 : 1.2; ctx.stroke();
+    const ctx = this.canvas.getContext('2d'); ctx.scale(ratio, ratio); visible = [];
+    if (this.map.getZoom() < 11) {
+      document.querySelector('#visible-count').textContent = 'District summaries · zoom in to see records'; return;
     }
-    const records = cells.reduce((sum, cell) => sum + cell.points.length, 0);
-    document.querySelector('#visible-count').textContent = `${count(records)} filtered records in ${count(cells.length)} visible cells`;
-
+    const bounds = this.map.getPixelBounds(), scale = this.map.getZoomScale(this.map.getZoom(), 0);
+    const groups = {within: [], beyond: [], missing: [], unknown: []};
+    for (const p of points) {
+      if (!filters.has(p[3])) continue;
+      const x = p.world.x * scale - bounds.min.x, y = p.world.y * scale - bounds.min.y;
+      if (x < -5 || x > size.x + 5 || y < -5 || y > size.y + 5) continue;
+      groups[p[3]].push([x, y]); visible.push([x, y, p]);
+    }
+    const radius = this.map.getZoom() >= 14 ? 3.5 : 2.5;
+    for (const key of Object.keys(groups)) {
+      ctx.fillStyle = colors[key]; ctx.globalAlpha = .88; ctx.beginPath();
+      for (const [x, y] of groups[key]) { ctx.moveTo(x + radius, y); ctx.arc(x, y, radius, 0, Math.PI * 2); }
+      ctx.fill();
+    }
+    document.querySelector('#visible-count').textContent = `${count(visible.length)} visible filtered records`;
   }
 });
 const pointsLayer = new PointsLayer().addTo(map);
-
+function pointAt(location) {
+  let closest = null, best = 8 * 8;
+  for (const [x, y, p] of visible) {
+    const d = (x - location.x) ** 2 + (y - location.y) ** 2;
+    if (d < best) { best = d; closest = p; }
+  }
+  return closest;
+}
 function text(tag, value, className) {
-  const el = document.createElement(tag); el.textContent = value;
-  if (className) el.className = className;
-  return el;
+  const el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el;
 }
 function detail(dl, name, value) {
   const row = document.createElement('div'); row.append(text('dt', name), text('dd', value)); dl.append(row);
@@ -110,110 +98,111 @@ function clearSelection() {
   if (routeLayer) map.removeLayer(routeLayer);
   selectionMarker = routeLayer = null; selection.hidden = true;
 }
+function closeButton() {
+  const close = text('button', '×', 'selection-close'); close.setAttribute('aria-label', 'Close details');
+  close.addEventListener('click', clearSelection); return close;
+}
 async function selectPoint(p) {
-  clearSelection();
-  const version = selectionVersion;
-  selection.hidden = false;
-  const close = text('button', '×', 'selection-close'); close.setAttribute('aria-label', 'Close habitation details'); close.addEventListener('click', clearSelection);
+  clearSelection(); const version = selectionVersion; selection.hidden = false;
   const dl = document.createElement('dl');
-  detail(dl, 'Recorded status', labels[p[3]]);
-  detail(dl, 'Recorded distance', distance(p[4]));
-  detail(dl, 'Facility ID', p[5] || 'Not recorded');
+  detail(dl, 'District (2011)', districtName(p[8]));
+  detail(dl, 'Habitation ID', p[2]); detail(dl, 'Recorded status', labels[p[3]]);
+  detail(dl, 'Recorded distance', distance(p[4])); detail(dl, 'Facility ID', p[5] || 'Not recorded');
   if (p[6]) detail(dl, 'Reason', p[6]);
-  const note = text('p', 'Looking for a matching route…');
-  selection.replaceChildren(close, text('div', 'SELECTED HABITATION', 'eyebrow'), text('h3', `ID ${p[2]}`), dl, note);
-  selectionMarker = L.circleMarker([p[0], p[1]], {radius: 8, color: '#173c32', weight: 2, fillColor: '#fff', fillOpacity: 0.6, interactive: false}).addTo(map);
+  const note = text('p', 'Looking for a matching historical route…');
+  selection.replaceChildren(closeButton(), text('div', 'SELECTED HABITATION', 'eyebrow'), text('h3', p[7] || 'Unnamed habitation'), dl, note);
+  selectionMarker = L.circleMarker([p[0], p[1]], {radius: 8, color: '#173c32', weight: 2, fillColor: '#fff', fillOpacity: .6, interactive: false}).addTo(map);
   try {
-    const response = await fetch(`/api/route?hab_id=${encodeURIComponent(p[2])}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const result = await response.json();
+    const result = await fetchJSON(`/api/route?hab_id=${encodeURIComponent(p[2])}`);
     if (version !== selectionVersion) return;
-    if (!result.routes.length) {
-      note.textContent = 'No route geometry with this habitation ID was found in the historical route layer.';
-      return;
-    }
+    if (!result.routes.length) { note.textContent = 'No route geometry with this habitation ID was found in the historical route layer.'; return; }
     const parts = result.routes.flatMap(r => r.parts);
-    if (parts.length) routeLayer = L.polyline(parts, {color: '#2059a6', weight: 3, opacity: 0.9, interactive: false}).addTo(map);
+    if (parts.length) routeLayer = L.polyline(parts, {color: '#2059a6', weight: 3, opacity: .9, interactive: false}).addTo(map);
     note.textContent = duplicates.has(p[2]) || result.routes.length > 1
       ? 'Blue line: candidate route(s) matched by ID. This ID is not unique; the match to this point is uncertain.'
       : 'Blue line: historical route matched by habitation ID. It may include non-road segments and is not validated for navigation.';
-  } catch (err) {
-    if (version === selectionVersion) note.textContent = `Could not load route: ${err.message}`;
-  }
+  } catch (err) { if (version === selectionVersion) note.textContent = `Could not load route: ${err.message}`; }
 }
-function selectCell(cell) {
-  if (cell.points.length === 1) { selectPoint(cell.points[0]); return; }
-  clearSelection();
-  selection.hidden = false;
-  const close = text('button', '×', 'selection-close');
-  close.setAttribute('aria-label', 'Close group details'); close.addEventListener('click', clearSelection);
+function selectDistrict(id, zoom = false) {
+  const d = districtsById.get(id), stats = districtStats.get(id);
+  if (!d || !stats) return;
+  clearSelection(); selection.hidden = false;
+  districtSelect.value = id;
   const dl = document.createElement('dl');
-  detail(dl, 'No-path share', `${(cell.counts.missing / cell.points.length * 100).toFixed(1)}% of filtered records`);
-  for (const key of Object.keys(labels)) if (cell.counts[key]) detail(dl, labels[key], count(cell.counts[key]));
-  const zoom = text('button', 'Zoom into group', 'group-zoom');
-  zoom.type = 'button';
-  if (map.getZoom() >= 19) { zoom.disabled = true; zoom.textContent = 'Maximum zoom reached'; }
-  zoom.addEventListener('click', () => {
-    const groupBounds = L.latLngBounds(cell.points.map(p => [p[0], p[1]]));
-    if (map.getZoom() >= 19) return;
-    // Ensure a zoom-in even for a very tight set of overlapping points.
-    const target = Math.min(19, Math.max(map.getZoom() + 1, map.getBoundsZoom(groupBounds, false, [60, 60])));
-    map.setView(groupBounds.getCenter(), target); clearSelection();
-  });
-  const list = document.createElement('div'); list.className = 'group-list';
-  for (const p of cell.points.slice(0, 30)) {
-    const button = text('button', `ID ${p[2]} · ${labels[p[3]]}`, 'group-point');
-    button.type = 'button'; button.addEventListener('click', () => selectPoint(p)); list.append(button);
-  }
-  const note = text('p', cell.points.length > 30
-    ? 'Showing the first 30 records. Zoom in or search by ID to explore others. Hexagons summarize filtered records, not administrative areas.'
-    : 'Select a record below. Hexagons summarize filtered records, not administrative areas.');
-  selection.replaceChildren(close, text('div', 'HEXAGON SUMMARY', 'eyebrow'), text('h3', `${count(cell.points.length)} records`), dl, zoom, note, list);
+  detail(dl, 'Habitation records', count(stats.total));
+  detail(dl, 'No-path share', stats.total ? `${(100 * stats.missing / stats.total).toFixed(1)}%` : 'No records');
+  for (const key of Object.keys(labels)) if (stats[key]) detail(dl, labels[key], count(stats[key]));
+  const zoomButton = text('button', 'Zoom to district', 'group-zoom'); zoomButton.type = 'button';
+  zoomButton.addEventListener('click', () => map.fitBounds(d.layer.getBounds(), {padding: [20, 20], maxZoom: 11}));
+  selection.replaceChildren(closeButton(), text('div', '2011 DISTRICT SUMMARY', 'eyebrow'), text('h3', d.name), dl, zoomButton,
+    text('p', 'Counts include all assigned records, regardless of point filters. No path is not proof of inaccessibility. Boundaries are historical and generalized; not for navigation.'));
+  if (zoom) map.fitBounds(d.layer.getBounds(), {padding: [20, 20], maxZoom: 11});
+  updateSearch();
 }
-map.on('click', event => {
-  let closest = null, best = Infinity;
-  for (const cell of visible) {
-    const d = (cell.x - event.containerPoint.x) ** 2 + (cell.y - event.containerPoint.y) ** 2;
-    if (d <= (cell.radius + 4) ** 2 && d < best) { best = d; closest = cell; }
-  }
-  if (closest) selectCell(closest);
-});
+map.on('click', event => { const p = pointAt(event.containerPoint); if (p) selectPoint(p); });
 document.querySelectorAll('[data-filter]').forEach(box => box.addEventListener('change', () => {
   if (box.checked) filters.add(box.dataset.filter); else filters.delete(box.dataset.filter);
   pointsLayer.schedule();
 }));
-document.querySelector('#search-form').addEventListener('submit', event => {
-  event.preventDefault();
-  const value = document.querySelector('#search').value.trim();
+function choosePoint(p) {
+  if (!filters.has(p[3])) { filters.add(p[3]); document.querySelector(`[data-filter="${p[3]}"]`).checked = true; }
+  map.setView([p[0], p[1]], 14); selectPoint(p);
+}
+const normalize = value => value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim();
+function updateSearch() {
+  const term = normalize(search.value), scope = districtSelect.value;
+  results.replaceChildren();
   const message = document.querySelector('#search-message');
-  if (!/^\d+$/.test(value)) { message.textContent = 'Enter a numeric habitation ID.'; return; }
-  const matches = points.filter(p => p[2] === value);
-  if (!matches.length) { message.textContent = 'No habitation with that ID was found.'; return; }
-  const p = matches[0];
-  if (!filters.has(p[3])) {
-    filters.add(p[3]); document.querySelector(`[data-filter="${p[3]}"]`).checked = true;
+  if (term.length < 2) { message.textContent = 'Enter at least two letters of a name, or an ID.'; return; }
+  const matches = points.filter(p => (scope === '' || (scope === 'unassigned' ? !p[8] : p[8] === scope)) &&
+    (normalize(p[7] || '').includes(term) || p[2] === term));
+  matches.sort ( (a, b) => (normalize(a[7] || '').startsWith(term) ? 0 : 1) - (normalize(b[7] || '').startsWith(term) ? 0 : 1) || (a[7] || '').localeCompare(b[7] || '') );
+  message.textContent = matches.length ? `${count(matches.length)} matching records${matches.length > 30 ? ' · showing first 30; refine your search' : ''}` : 'No matching records in this district.';
+  for (const p of matches.slice(0, 30)) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'search-result';
+    button.append(text('strong', p[7] || 'Unnamed habitation'), text('span', `${districtName(p[8])} · ID ${p[2]} · ${labels[p[3]]}`));
+    button.addEventListener('click', () => choosePoint(p)); results.append(button);
   }
-  message.textContent = matches.length > 1 ? `${matches.length} points share this ID; showing the first. Route matching is uncertain.` : 'Habitation found.';
-  map.setView([p[0], p[1]], 13); selectPoint(p);
+}
+let searchTimer;
+search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(updateSearch, 150); });
+document.querySelector('#search-form').addEventListener('submit', e => { e.preventDefault(); clearTimeout(searchTimer); updateSearch(); });
+districtSelect.addEventListener('change', () => {
+  if (districtsById.has(districtSelect.value)) selectDistrict(districtSelect.value, true);
+  else { clearSelection(); updateSearch(); }
 });
-
-fetch('/api/habitations?v=3').then(response => {
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}).then(data => {
-  points = data.points;
-  duplicates = new Set(data.duplicate_ids);
+Promise.all([fetchJSON('/api/habitations?v=4'), fetchJSON('/districts-2011.geojson?v=4')]).then(([data, boundaries]) => {
+  points = data.points; duplicates = new Set(data.duplicate_ids);
+  for (const p of points) p.world = map.project([p[0], p[1]], 0);
+  const summary = DistrictStats.summarize(points, boundaries.features); districtStats = summary.stats;
+  districtLayer = L.geoJSON(boundaries, {
+    style: feature => ({color: '#f8faf4', weight: 1.1, fillColor: DistrictStats.shareColor(districtStats.get(feature.properties.id)), fillOpacity: .9}),
+    onEachFeature: (feature, layer) => {
+      const {id, name} = feature.properties, stats = districtStats.get(id);
+      districtsById.set(id, {name, layer});
+      const tooltip = document.createElement('span'); tooltip.textContent = `${name} · ${count(stats.total)} records`;
+      layer.bindTooltip(tooltip, {sticky: true});
+      layer.on('click', e => {
+        const p = pointAt(e.containerPoint); if (p) selectPoint(p); else selectDistrict(id);
+        L.DomEvent.stopPropagation(e.originalEvent);
+      });
+    }
+  }).addTo(map);
+  // Ensure the custom point canvas is above the district renderer.
+  map.removeLayer(pointsLayer); pointsLayer.addTo(map);
+  for (const [id, d] of [...districtsById.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name))) districtSelect.add(new Option(d.name, id));
+  districtSelect.add(new Option(`Outside / unassigned (${count(summary.unassigned)})`, 'unassigned'));
+  document.querySelector('#unassigned-count').textContent = count(summary.unassigned);
   const totals = {within: 0, beyond: 0, missing: 0, unknown: 0};
-  for (const p of points) { p.world = map.project([p[0], p[1]], 0); totals[p[3]]++; }
+  for (const p of points) totals[p[3]]++;
   document.querySelector('#total').textContent = count(points.length);
   document.querySelector('#routes-count').textContent = count(totals.within + totals.beyond + totals.unknown);
   document.querySelector('#missing-count').textContent = count(totals.missing);
   for (const [key, value] of Object.entries(totals)) {
     document.querySelector(`.bar-${key}`).style.width = `${points.length ? value / points.length * 100 : 0}%`;
+    document.querySelector(`#count-${key}`).textContent = count(value);
   }
   document.querySelector('.outcome-bar').setAttribute('aria-label', Object.keys(totals).map(key => `${labels[key]}: ${count(totals[key])} records`).join('; '));
-  for (const [key, value] of Object.entries(totals)) document.querySelector(`#count-${key}`).textContent = count(value);
   document.querySelector('#unknown-filter').hidden = totals.unknown === 0;
-  if (data.source_count !== points.length) document.querySelector('.helper').textContent += ` ${count(data.source_count - points.length)} records without valid points or IDs were omitted.`;
   loading.hidden = true; pointsLayer.schedule();
-}).catch(error => { loading.textContent = `Unable to load the data: ${error.message}. Check that the map server is running.`; loading.classList.add('error'); });
+}).catch(error => { loading.textContent = `Unable to load the data: ${error.message}. Check the map server and reference files.`; loading.classList.add('error'); });

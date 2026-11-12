@@ -45,6 +45,13 @@ class HistoricalMapTests(unittest.TestCase):
         self.assertEqual(first[2], '1230307')
         self.assertTrue(15 < first[0] < 23 and 72 < first[1] < 81)
         self.assertLess(first[4], 5000)
+        self.assertEqual(first[7], 'Shidhachi shelwadi')
+        self.assertEqual(first[8], '33')
+        self.assertEqual(sum(bool(p[7]) for p in points), 85107)
+        self.assertEqual(sum(p[8] is None for p in points), 319)
+        pune = [p for p in points if p[8] == '25']
+        self.assertEqual(len(pune), 7210)
+        self.assertEqual(Counter(p[3] for p in pune), {'within': 2416, 'beyond': 89, 'missing': 4705})
 
     def test_route_and_missing_route(self):
         routes = self.get_json('/api/route?hab_id=1230307')['routes']
@@ -62,8 +69,10 @@ class HistoricalMapTests(unittest.TestCase):
             self.assertEqual(error.exception.code, status)
         with urlopen(self.base + '/') as response:
             self.assertIn(b'Healthcare accessibility', response.read())
-        with urlopen(self.base + '/clusters.js') as response:
-            self.assertIn(b'groupPoints', response.read())
+        with urlopen(self.base + '/districts.js') as response:
+            self.assertIn(b'summarize', response.read())
+        districts = self.get_json('/districts-2011.geojson')
+        self.assertEqual(len(districts['features']), 35)
         context = self.get_json('/regional-context.geojson')
         self.assertIn('Maharashtra', [f['properties']['name'] for f in context['features']])
         places = self.get_json('/regional-places.geojson')

@@ -1,0 +1,15 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {summarize, shareColor} = require('../maps/districts.js');
+const feature = id => ({properties: {id}});
+const p = (status, district) => [0, 0, '1', status, null, null, '', 'name', district];
+const {stats, unassigned} = summarize([p('within', '1'), p('missing', '1'), p('beyond', '2'), p('missing', null), p('missing', 'unknown')], [feature('1'), feature('2'), feature('3')]);
+assert.deepEqual(stats.get('1'), {total: 2, within: 1, beyond: 0, missing: 1, unknown: 0});
+assert.equal(unassigned, 2);
+assert.equal(shareColor(stats.get('1')), '#e2ca8d');
+assert.equal(shareColor(stats.get('2')), '#69a891');
+assert.equal(shareColor(stats.get('3')), '#d8dfd7');
+assert.equal(shareColor({total: 4, missing: 1}), '#a5c4a2');
+assert.equal(shareColor({total: 4, missing: 3}), '#dca07f');
+assert.equal(shareColor({total: 4, missing: 4}), '#bc6d68');
+console.log('District aggregation tests passed');

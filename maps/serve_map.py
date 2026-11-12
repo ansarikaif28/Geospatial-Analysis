@@ -3,6 +3,7 @@
 import argparse
 from collections import Counter
 from functools import lru_cache
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import math
@@ -29,9 +30,16 @@ def load_points():
     stem = 'habitations_with_path_info'
     project = transformer(stem)
     reader = shapefile.Reader(str(DATA / stem), encoding='utf-8')
+    reference = json.loads((HERE / 'habitation-reference.json').read_text())
+    for suffix, expected in reference['output_sha256'].items():
+        actual = hashlib.sha256((DATA / (stem + '.' + suffix)).read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f'Historical {suffix} file changed; rebuild habitation-reference.json before starting the map')
+    if len(reference['rows']) != len(reader):
+        raise ValueError('Historical record count changed; rebuild habitation-reference.json')
     rows = []
     ids = Counter()
-    for feature in reader.iterShapeRecords():
+    for index, feature in enumerate(reader.iterShapeRecords()):
         rec = feature.record
         if not feature.shape.points or rec.HAB_ID is None:
             continue
@@ -46,7 +54,7 @@ def load_points():
         facility = number(rec.nearest_fa)
         # Identifiers are displayed as strings, not floating-point measurements.
         facility = str(int(facility)) if facility is not None and facility.is_integer() else str(facility) if facility is not None else None
-        rows.append([round(lat, 6), round(lon, 6), hid, state, distance, facility, rec.reason_no_ or ''])
+        rows.append([round(lat, 6), round(lon, 6), hid, state, distance, facility, rec.reason_no_ or '', *reference['rows'][index]])
         ids[hid] += 1
     return json.dumps({'points': rows, 'duplicate_ids': [k for k, count in ids.items() if count > 1],
                        'source_count': len(reader)}, separators=(',', ':'), allow_nan=False).encode()
@@ -87,7 +95,8 @@ def route_for(hid):
 FILES = {
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
-    '/clusters.js': ('clusters.js', 'text/javascript; charset=utf-8'),
+    '/districts.js': ('districts.js', 'text/javascript; charset=utf-8'),
+    '/districts-2011.geojson': ('districts-2011.geojson', 'application/geo+json; charset=utf-8'),
     '/regional-context.geojson': ('regional-context.geojson', 'application/geo+json; charset=utf-8'),
     '/regional-places.geojson': ('regional-places.geojson', 'application/geo+json; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
