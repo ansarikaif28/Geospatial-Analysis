@@ -1,16 +1,25 @@
-/* Screen-grid aggregation: visual decluttering, not a spatial analysis. */
+/* Pointy-top hexagons in world-pixel space: display aggregation, not analysis. */
 (function (root) {
   'use strict';
-  function groupPoints(points, filters, scale, bounds, size, cellSize) {
+  function hexCoordinates(x, y, radius) {
+    const q = (Math.sqrt(3) / 3 * x - y / 3) / radius;
+    const r = (2 / 3 * y) / radius;
+    let a = Math.round(q), b = Math.round(r), c = Math.round(-q - r);
+    const da = Math.abs(a - q), db = Math.abs(b - r), dc = Math.abs(c + q + r);
+    if (da > db && da > dc) a = -b - c;
+    else if (db > dc) b = -a - c;
+    return [a, b];
+  }
+  function groupPoints(points, filters, scale, bounds, size, radius) {
     const cells = new Map();
     for (const p of points) {
       if (!filters.has(p[3])) continue;
       const wx = p.world.x * scale, wy = p.world.y * scale;
-      const col = Math.floor(wx / cellSize), row = Math.floor(wy / cellSize);
-      const cx = (col + 0.5) * cellSize - bounds.min.x;
-      const cy = (row + 0.5) * cellSize - bounds.min.y;
-      if (cx < -cellSize / 2 || cx > size.x + cellSize / 2 || cy < -cellSize / 2 || cy > size.y + cellSize / 2) continue;
-      const key = `${col}:${row}`;
+      const [q, r] = hexCoordinates(wx, wy, radius);
+      const cx = radius * Math.sqrt(3) * (q + r / 2) - bounds.min.x;
+      const cy = radius * 1.5 * r - bounds.min.y;
+      if (cx < -radius || cx > size.x + radius || cy < -radius || cy > size.y + radius) continue;
+      const key = `${q}:${r}`;
       let cell = cells.get(key);
       if (!cell) {
         cell = {x: cx, y: cy, points: [], counts: {within: 0, beyond: 0, missing: 0, unknown: 0}};

@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#123b36">
+  <link rel="icon" href="data:,">
   <title>Maharashtra Healthcare Access | Historical network explorer</title>
-  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/style.css">
-  <script src="/vendor/leaflet/leaflet.js" defer></script>
-  <script src="/clusters.js" defer></script>
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=3">
+  <link rel="stylesheet" href="/style.css?v=3">
+  <script src="/vendor/leaflet/leaflet.js?v=3" defer></script>
+  <script src="/clusters.js?v=3" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </head>
 <body>
   <div class="app">
@@ -29,8 +30,11 @@
       </section>
       <section aria-labelledby="layers-title">
         <div class="section-head"><h2 id="layers-title">EXPLORE THE MAP</h2><span>02 / FILTER</span></div>
-        <p class="helper">Circles group records in screen-grid cells; their number is the record count. Click a group for its breakdown or zoom in. Individual points show their recorded status and matching route.</p>
-        <div class="cluster-key"><i></i> Grouped records <span>Number = records in cell</span></div>
+        <p class="helper">Hexagons summarize nearby records. Color shows the share with no recorded path among the active filters. Click a hexagon for counts; zoom in to see individual records.</p>
+        <div class="cluster-key"><span class="cluster-hex">⬡</span><div>SHARE WITH NO PATH <small>Of filtered records in each hexagon</small></div></div>
+        <div class="ramp" aria-label="Color scale: no-path share from zero percent to over 75 percent"><i></i><i></i><i></i><i></i><i></i></div><div class="ramp-labels"><span>0%</span><span>&gt;0–25%</span><span>&gt;25–50%</span><span>&gt;50–75%</span><span>&gt;75–100%</span></div>
+        <p class="legend-note">Zoom-dependent display cells, not administrative areas. Small cells can exaggerate percentages. Individual points use the filter colors below.</p>
+        <div class="filter-title">FILTER RECORDS <span>Entire dataset</span></div>
         <div class="filters">
           <label><input type="checkbox" data-filter="within" checked><i class="swatch within"></i><span>Within 5 km</span><b id="count-within">—</b></label>
           <label><input type="checkbox" data-filter="beyond" checked><i class="swatch beyond"></i><span>Beyond 5 km</span><b id="count-beyond">—</b></label>
@@ -43,8 +47,7 @@
     </aside>
     <main class="map-area">
       <div id="map" aria-label="Interactive map of historical habitation paths"></div>
-      <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
-      <div id="basemap-warning" class="basemap-warning" role="status" hidden>Detailed basemap unavailable. Showing the local regional outline instead.</div>
+      <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong><small>LOCAL CONTEXT MAP · NO EXTERNAL TILES</small></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
       <div id="loading" class="loading" role="status">Loading historical shapefiles…</div>
       <div id="selection" class="selection" hidden aria-live="polite"></div>
       <div class="map-caption"><span class="caption-dot"></span> HISTORICAL DATA <span class="separator">/</span> <span id="visible-count">Loading…</span></div>

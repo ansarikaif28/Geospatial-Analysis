@@ -66,6 +66,10 @@ class HistoricalMapTests(unittest.TestCase):
             self.assertIn(b'groupPoints', response.read())
         context = self.get_json('/regional-context.geojson')
         self.assertIn('Maharashtra', [f['properties']['name'] for f in context['features']])
+        places = self.get_json('/regional-places.geojson')
+        self.assertIn('Mumbai', [f['properties']['name'] for f in places['features']])
+        with urlopen(self.base + '/') as response:
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
 
 if __name__ == '__main__':

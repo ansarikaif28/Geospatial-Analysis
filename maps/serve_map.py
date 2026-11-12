@@ -89,6 +89,7 @@ FILES = {
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
     '/clusters.js': ('clusters.js', 'text/javascript; charset=utf-8'),
     '/regional-context.geojson': ('regional-context.geojson', 'application/geo+json; charset=utf-8'),
+    '/regional-places.geojson': ('regional-places.geojson', 'application/geo+json; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
     '/vendor/leaflet/leaflet.js': ('vendor/leaflet/leaflet.js', 'text/javascript; charset=utf-8'),
     '/vendor/leaflet/leaflet.css': ('vendor/leaflet/leaflet.css', 'text/css; charset=utf-8'),
@@ -116,6 +117,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(payload)))
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(payload)
 
