@@ -1,0 +1,7 @@
+# Local environments, notebook checkpoints, and data products
+.venv/
+.ipynb_checkpoints/
+__pycache__/
+data/
+outputs/
+google_drive/

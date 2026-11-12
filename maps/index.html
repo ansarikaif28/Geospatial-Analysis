@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b36">
+  <link rel="icon" href="data:,">
+  <title>Maharashtra Healthcare Access | Historical network explorer</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=8">
+  <script src="/vendor/leaflet/leaflet.js?v=8" defer></script>
+  <script src="/districts.js?v=8" defer></script>
+  <script src="/app.js?v=8" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Map controls and information">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><span>FIELDNOTES <small> / GEOSPATIAL ANALYSIS</small></span></div>
+      <div class="intro">
+        <div class="eyebrow"><span class="status-dot"></span> HISTORICAL NETWORK OUTPUT</div>
+        <h1>Mapping access<br>to <em>healthcare.</em></h1>
+        <p>Explore recorded habitation-to-facility paths across Maharashtra’s historical network outputs.</p>
+      </div>
+      <div class="notice"><strong>Research prototype</strong> · Historical outputs have unverified provenance. Many recorded destinations match non-medical facilities, so routes and distances do not establish healthcare access. Not for navigation or planning.</div>
+      <section aria-labelledby="overview-title">
+        <div class="section-head"><h2 id="overview-title">THE DATASET</h2><span>01 / OVERVIEW</span></div>
+        <div class="stats"><div><strong id="total">—</strong><span>habitation records</span></div><div><strong id="routes-count">—</strong><span>original path found</span></div><div><strong id="missing-count">—</strong><span>no path found</span></div></div>
+        <div class="outcome-bar" role="img" aria-label="Loading recorded path outcomes"><span class="bar-within"></span><span class="bar-beyond"></span><span class="bar-missing"></span><span class="bar-unknown"></span></div>
+        <p class="dataset-note">Recorded path outcomes · all original records, including non-medical destinations</p>
+      </section>
+      <section aria-labelledby="find-title">
+        <div class="section-head"><h2 id="find-title">FIND A HABITATION</h2><span>02 / SEARCH</span></div>
+        <form id="search-form" class="search"><label for="district">DISTRICT</label>
+          <select id="district" aria-label="Limit search to district"><option value="">All 2011 districts</option></select>
+          <div><input id="search" type="search" placeholder="Type a habitation name" autocomplete="off" aria-label="Habitation name"><button type="submit">Find <span aria-hidden="true">↗</span></button></div>
+          <p id="search-message" role="status">Enter at least two letters of a name, or an ID.</p>
+          <div id="search-results" class="search-results" aria-label="Matching habitations"></div>
+        </form>
+      </section>
+      <section aria-labelledby="layers-title">
+        <div class="section-head"><h2 id="layers-title">EXPLORE THE MAP</h2><span>03 / MAP</span></div>
+        <p class="helper">Districts are colored by the share of assigned habitation records with no recorded path. Select a district for its full breakdown; zoom in for individual records.</p>
+        <div class="cluster-key"><span class="cluster-hex">◈</span><div>SHARE WITH NO PATH <small>Of all assigned records in each 2011 district</small></div></div>
+        <div class="ramp" aria-label="Color scale: no-path share from zero percent to over 75 percent"><i></i><i></i><i></i><i></i><i></i></div><div class="ramp-labels"><span>0%</span><span>&gt;0–25%</span><span>&gt;25–50%</span><span>&gt;50–75%</span><span>&gt;75–100%</span></div>
+        <div class="no-data-key"><i></i> No assigned records</div>
+        <p class="legend-note">2011 boundaries may differ from current districts. No path is not proof of inaccessibility. Original status includes paths to non-medical destinations. Individual habitations use the filter colors below; filters do not change district totals.</p>
+        <div class="filter-title">HABITATIONS BY STATUS <span>Zoom 11+</span></div>
+        <p class="symbol-help"><svg class="legend-house" viewBox="0 0 20 20" aria-hidden="true"><path d="M1 9 L10 1 L19 9 L17 9 L17 18 L3 18 L3 9 Z" fill="#38886f" stroke="white" stroke-width="1.5"/></svg> House = habitation · color = original status</p>
+        <div class="filters">
+          <label><input type="checkbox" data-filter="within" checked><i class="swatch within"></i><span>Within 5 km</span><b id="count-within">—</b></label>
+          <label><input type="checkbox" data-filter="beyond" checked><i class="swatch beyond"></i><span>Beyond 5 km</span><b id="count-beyond">—</b></label>
+          <label><input type="checkbox" data-filter="missing" checked><i class="swatch missing"></i><span>No path found</span><b id="count-missing">—</b></label>
+          <label id="unknown-filter" hidden><input type="checkbox" data-filter="unknown" checked><i class="swatch unknown"></i><span>Distance unavailable</span><b id="count-unknown">—</b></label>
+        </div>
+        <p class="unassigned"><strong id="unassigned-count">—</strong> records fall outside, or could not be uniquely assigned to, these historical district boundaries.</p>
+      </section>
+
+      <section aria-labelledby="routes-title">
+        <div class="section-head"><h2 id="routes-title">NETWORK &amp; ROUTES</h2><span>04 / LAYERS</span></div>
+        <p class="symbol-help"><span class="legend-facility medical">+</span> Screened medical destination</p>
+        <label class="path-toggle"><input id="show-medical" type="checkbox" checked> <span>Medical destinations (screened)</span></label>
+        <p class="legend-note">Squares show matched historical destinations with medical-center descriptions, at zoom 12+. Veterinary and ambiguous descriptions are excluded where identifiable. Names and service status are not independently verified; some centers may be missing.</p>
+        <label class="path-toggle"><input id="show-paths" type="checkbox" checked> <span>Nearby paths to screened medical destinations</span></label>
+        <p id="path-status" class="path-status" role="status">Zoom in to load nearby screened medical-destination paths.</p>
+        <div class="route-legend"><span><i></i> Path to screened medical destination</span><span><i></i> Selected habitation's path</span></div>
+        <p class="legend-note">Only paths to screened medical destinations are shown. The original summary, district shares and habitation statuses still include all destinations, including non-medical ones. Paths may contain non-road connectors and are not for navigation.</p>
+      </section>
+      <div class="sidebar-footer">5 km is a distance threshold, not a measure of service quality. <a href="https://github.com/ansarikaif28/Geospatial-Analysis" target="_blank" rel="noopener noreferrer">Project repository ↗</a></div>
+    </aside>
+    <main class="map-area">
+      <div id="map" aria-label="Interactive map of historical habitation paths"></div>
+      <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong><small>2011 DISTRICTS · NO EXTERNAL TILES</small></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
+      <div id="loading" class="loading" role="status">Loading historical shapefiles…</div>
+      <div id="path-indicator" class="path-indicator" aria-hidden="true"></div>
+      <div id="selection" class="selection" hidden aria-live="polite"></div>
+      <div class="map-caption"><span class="caption-dot"></span> HISTORICAL DATA <span class="separator">/</span> <span id="visible-count">Loading…</span></div>
+    </main>
+  </div>
+</body>
+</html>
