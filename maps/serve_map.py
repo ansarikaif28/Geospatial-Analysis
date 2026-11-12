@@ -87,6 +87,8 @@ def route_for(hid):
 FILES = {
     '/': ('index.html', 'text/html; charset=utf-8'),
     '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+    '/clusters.js': ('clusters.js', 'text/javascript; charset=utf-8'),
+    '/regional-context.geojson': ('regional-context.geojson', 'application/geo+json; charset=utf-8'),
     '/style.css': ('style.css', 'text/css; charset=utf-8'),
     '/vendor/leaflet/leaflet.js': ('vendor/leaflet/leaflet.js', 'text/javascript; charset=utf-8'),
     '/vendor/leaflet/leaflet.css': ('vendor/leaflet/leaflet.css', 'text/css; charset=utf-8'),

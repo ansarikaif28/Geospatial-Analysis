@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/style.css">
   <script src="/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/clusters.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -22,11 +23,14 @@
       <div class="notice"><strong>Research prototype</strong> · Historic outputs with unverified provenance. Routes and distances are not validated for navigation or planning.</div>
       <section aria-labelledby="overview-title">
         <div class="section-head"><h2 id="overview-title">THE DATASET</h2><span>01 / OVERVIEW</span></div>
-        <div class="stats"><div><strong id="total">—</strong><span>habitations</span></div><div><strong id="routes-count">—</strong><span>paths found</span></div><div><strong id="missing-count">—</strong><span>no path found</span></div></div>
+        <div class="stats"><div><strong id="total">—</strong><span>habitation records</span></div><div><strong id="routes-count">—</strong><span>reported path found</span></div><div><strong id="missing-count">—</strong><span>no path found</span></div></div>
+        <div class="outcome-bar" role="img" aria-label="Loading recorded path outcomes"><span class="bar-within"></span><span class="bar-beyond"></span><span class="bar-missing"></span><span class="bar-unknown"></span></div>
+        <p class="dataset-note">Recorded path outcomes · all records</p>
       </section>
       <section aria-labelledby="layers-title">
         <div class="section-head"><h2 id="layers-title">EXPLORE THE MAP</h2><span>02 / FILTER</span></div>
-        <p class="helper">Filter by recorded path distance. Click a point for details and its matching route.</p>
+        <p class="helper">Circles group records in screen-grid cells; their number is the record count. Click a group for its breakdown or zoom in. Individual points show their recorded status and matching route.</p>
+        <div class="cluster-key"><i></i> Grouped records <span>Number = records in cell</span></div>
         <div class="filters">
           <label><input type="checkbox" data-filter="within" checked><i class="swatch within"></i><span>Within 5 km</span><b id="count-within">—</b></label>
           <label><input type="checkbox" data-filter="beyond" checked><i class="swatch beyond"></i><span>Beyond 5 km</span><b id="count-beyond">—</b></label>
@@ -40,6 +44,7 @@
     <main class="map-area">
       <div id="map" aria-label="Interactive map of historical habitation paths"></div>
       <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
+      <div id="basemap-warning" class="basemap-warning" role="status" hidden>Detailed basemap unavailable. Showing the local regional outline instead.</div>
       <div id="loading" class="loading" role="status">Loading historical shapefiles…</div>
       <div id="selection" class="selection" hidden aria-live="polite"></div>
       <div class="map-caption"><span class="caption-dot"></span> HISTORICAL DATA <span class="separator">/</span> <span id="visible-count">Loading…</span></div>

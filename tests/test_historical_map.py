@@ -62,6 +62,10 @@ class HistoricalMapTests(unittest.TestCase):
             self.assertEqual(error.exception.code, status)
         with urlopen(self.base + '/') as response:
             self.assertIn(b'Healthcare accessibility', response.read())
+        with urlopen(self.base + '/clusters.js') as response:
+            self.assertIn(b'groupPoints', response.read())
+        context = self.get_json('/regional-context.geojson')
+        self.assertIn('Maharashtra', [f['properties']['name'] for f in context['features']])
 
 
 if __name__ == '__main__':
