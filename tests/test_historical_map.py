@@ -117,7 +117,9 @@ class HistoricalMapTests(unittest.TestCase):
                 urlopen(self.base + path)
             self.assertEqual(error.exception.code, status)
         with urlopen(self.base + '/') as response:
-            self.assertIn(b'Healthcare accessibility', response.read())
+            html = response.read()
+            self.assertIn(b'Healthcare accessibility', html)
+            self.assertNotIn(b'Proposed facilities unavailable', html)
         with urlopen(self.base + '/districts.js') as response:
             self.assertIn(b'summarize', response.read())
         districts = self.get_json('/districts-2011.geojson')

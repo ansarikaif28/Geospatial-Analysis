@@ -127,7 +127,7 @@ function selectFacility(f) {
   const dl = document.createElement('dl');
   detail(dl, 'Facility ID', f[2]); detail(dl, 'Source category', f[4] || 'Not recorded');
   selection.replaceChildren(closeButton(), text('div', 'MATCHED HISTORICAL DESTINATION', 'eyebrow'), text('h3', f[3] || 'Unnamed destination'), dl,
-    text('p', 'Matched by ID and route endpoint to a conservatively screened PMGSY medical record. Its service and current status are not verified. Not a proposed facility.'));
+    text('p', 'Matched by ID and route endpoint to a conservatively screened PMGSY medical record. Its service and current status are not verified.'));
   destinationMarker = L.marker([f[0], f[1]], {icon: facilityIcon(f), interactive: false}).addTo(map);
 }
 function text(tag, value, className) {
