@@ -18,6 +18,7 @@ class HistoricalMapTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         app.POINTS = app.load_points()
+        app.FACILITIES = app.load_facilities()
         app.ROUTES = app.load_routes()
         app.ROUTE_BOUNDS = app.load_route_bounds()
         app.ROUTE_WGS_BOUNDS = app.route_wgs_bounds()
@@ -63,6 +64,16 @@ class HistoricalMapTests(unittest.TestCase):
         self.assertTrue(routes[0]['parts'])
         self.assertTrue(15 < routes[0]['parts'][0][0][0] < 23)
         self.assertEqual(self.get_json('/api/route?hab_id=1237684')['routes'], [])
+
+    def test_facility_reference(self):
+        data = self.get_json('/api/facilities')
+        self.assertEqual(data['stats']['matched_routes'], 51502)
+        self.assertEqual(data['stats']['unmatched_or_ambiguous_routes'], 4)
+        self.assertEqual(data['stats']['medical_destinations'], 2084)
+        self.assertEqual(data['stats']['other_destinations'], 30362)
+        matched = {f[2]: f for f in data['facilities']}
+        self.assertEqual(matched['480452'][3:], ['Grampanchayat Keravade k narur', 'Transport/Admin'])
+        self.assertEqual(len(matched), 32446)
 
     def test_viewport_routes(self):
         result = self.get_json('/api/routes-in-view?bbox=73.85,16.02,73.90,16.05')

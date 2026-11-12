@@ -33,8 +33,8 @@ fetchJSON('/regional-places.geojson?v=4').then(data => {
 }).catch(err => console.error('Place labels unavailable:', err));
 document.querySelector('#reset').addEventListener('click', () => map.setView([19.2, 76.5], 7));
 const filters = new Set(Object.keys(colors));
-let points = [], visible = [], duplicates = new Set(), districtsById = new Map(), districtStats = new Map();
-let districtLayer, selectionMarker, routeLayer, selectionVersion = 0;
+let points = [], visible = [], facilities = [], visibleFacilities = [], facilitiesById = new Map(), duplicates = new Set(), districtsById = new Map(), districtStats = new Map();
+let districtLayer, selectionMarker, destinationMarker, routeLayer, selectionVersion = 0;
 const loading = document.querySelector('#loading');
 const selection = document.querySelector('#selection');
 const districtSelect = document.querySelector('#district');
@@ -62,7 +62,7 @@ const PointsLayer = L.Layer.extend({
     this.canvas.width = Math.round(size.x * ratio); this.canvas.height = Math.round(size.y * ratio);
     this.canvas.style.width = `${size.x}px`; this.canvas.style.height = `${size.y}px`;
     L.DomUtil.setPosition(this.canvas, this.map.containerPointToLayerPoint([0, 0]));
-    const ctx = this.canvas.getContext('2d'); ctx.scale(ratio, ratio); visible = [];
+    const ctx = this.canvas.getContext('2d'); ctx.scale(ratio, ratio); visible = []; visibleFacilities = [];
     if (this.map.getZoom() < 11) {
       document.querySelector('#visible-count').textContent = 'District summaries · zoom in to see records'; return;
     }
@@ -74,13 +74,32 @@ const PointsLayer = L.Layer.extend({
       if (x < -5 || x > size.x + 5 || y < -5 || y > size.y + 5) continue;
       groups[p[3]].push([x, y]); visible.push([x, y, p]);
     }
-    const radius = this.map.getZoom() >= 14 ? 3.5 : 2.5;
+    // Diamond habitation symbols retain the status colors and remain legible on the choropleth.
+    const radius = this.map.getZoom() >= 14 ? 5 : 3.5;
     for (const key of Object.keys(groups)) {
-      ctx.fillStyle = colors[key]; ctx.globalAlpha = .88; ctx.beginPath();
-      for (const [x, y] of groups[key]) { ctx.moveTo(x + radius, y); ctx.arc(x, y, radius, 0, Math.PI * 2); }
-      ctx.fill();
+      ctx.fillStyle = colors[key]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.globalAlpha = .95; ctx.beginPath();
+      for (const [x, y] of groups[key]) { ctx.moveTo(x, y - radius); ctx.lineTo(x + radius, y); ctx.lineTo(x, y + radius); ctx.lineTo(x - radius, y); ctx.closePath(); }
+      ctx.fill(); ctx.stroke();
     }
-    document.querySelector('#visible-count').textContent = `${count(visible.length)} visible filtered records`;
+    if (this.map.getZoom() >= 12) {
+      const showMedical = document.querySelector('#show-medical').checked;
+      const showOther = document.querySelector('#show-other').checked;
+      for (const f of facilities) {
+        const medical = f[4].toLowerCase() === 'medical';
+        if (!(medical ? showMedical : showOther)) continue;
+        const x = f.world.x * scale - bounds.min.x, y = f.world.y * scale - bounds.min.y;
+        if (x < -8 || x > size.x + 8 || y < -8 || y > size.y + 8) continue;
+        visibleFacilities.push([x, y, f]);
+        ctx.globalAlpha = .95; ctx.fillStyle = medical ? '#67428b' : '#576b80'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.rect(x - 5, y - 5, 10, 10); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath();
+        ctx.moveTo(x - 2.5, y); ctx.lineTo(x + 2.5, y);
+        if (medical) { ctx.moveTo(x, y - 2.5); ctx.lineTo(x, y + 2.5); }
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    document.querySelector('#visible-count').textContent = `${count(visible.length)} habitations · ${count(visibleFacilities.length)} destinations shown`;
   }
 });
 const pointsLayer = new PointsLayer().addTo(map);
@@ -92,6 +111,26 @@ function pointAt(location) {
   }
   return closest;
 }
+function facilityAt(location) {
+  let closest = null, best = 8 * 8;
+  for (const [x, y, f] of visibleFacilities) {
+    const d = (x - location.x) ** 2 + (y - location.y) ** 2;
+    if (d < best) { best = d; closest = f; }
+  }
+  return closest;
+}
+function facilityIcon(f) {
+  const medical = f[4].toLowerCase() === 'medical';
+  return L.divIcon({className: 'destination-icon', html: `<span class="destination-symbol ${medical ? 'medical' : 'other'}">${medical ? '+' : '−'}</span>`, iconSize: [18, 18], iconAnchor: [9, 9]});
+}
+function selectFacility(f) {
+  clearSelection(); selection.hidden = false;
+  const dl = document.createElement('dl');
+  detail(dl, 'Facility ID', f[2]); detail(dl, 'Source category', f[4] || 'Not recorded');
+  selection.replaceChildren(closeButton(), text('div', 'MATCHED HISTORICAL DESTINATION', 'eyebrow'), text('h3', f[3] || 'Unnamed destination'), dl,
+    text('p', 'Matched by facility ID and route endpoint to PMGSY source data. Category and name are source attributes, not a validation of healthcare service. Not a proposed facility.'));
+  destinationMarker = L.marker([f[0], f[1]], {icon: facilityIcon(f), interactive: false}).addTo(map);
+}
 function text(tag, value, className) {
   const el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el;
 }
@@ -101,8 +140,9 @@ function detail(dl, name, value) {
 function clearSelection() {
   selectionVersion++;
   if (selectionMarker) map.removeLayer(selectionMarker);
+  if (destinationMarker) map.removeLayer(destinationMarker);
   if (routeLayer) map.removeLayer(routeLayer);
-  selectionMarker = routeLayer = null; selection.hidden = true;
+  selectionMarker = destinationMarker = routeLayer = null; selection.hidden = true;
 }
 function closeButton() {
   const close = text('button', '×', 'selection-close'); close.setAttribute('aria-label', 'Close details');
@@ -117,16 +157,19 @@ async function selectPoint(p) {
   if (p[6]) detail(dl, 'Reason', p[6]);
   const note = text('p', 'Looking for a matching historical route…');
   selection.replaceChildren(closeButton(), text('div', 'SELECTED HABITATION', 'eyebrow'), text('h3', p[7] || 'Unnamed habitation'), dl, note);
-  selectionMarker = L.circleMarker([p[0], p[1]], {radius: 8, color: '#173c32', weight: 2, fillColor: '#fff', fillOpacity: .6, interactive: false}).addTo(map);
+  selectionMarker = L.marker([p[0], p[1]], {icon: L.divIcon({className: 'habitation-selected', html: '<span></span>', iconSize: [17, 17], iconAnchor: [8, 8]}), interactive: false}).addTo(map);
   try {
     const result = await fetchJSON(`/api/route?hab_id=${encodeURIComponent(p[2])}`);
     if (version !== selectionVersion) return;
     if (!result.routes.length) { note.textContent = 'No route geometry with this habitation ID was found in the historical route layer.'; return; }
+    const route = result.routes[0];
+    const destination = !duplicates.has(p[2]) && result.routes.length === 1 && route.facility === p[5] ? facilitiesById.get(route.facility) : null;
+    if (destination) destinationMarker = L.marker([destination[0], destination[1]], {icon: facilityIcon(destination), interactive: false}).addTo(map);
     const parts = result.routes.flatMap(r => r.parts);
     if (parts.length) routeLayer = L.polyline(parts, {pane: 'selectedRoute', color: '#1265be', weight: 4, opacity: .95, interactive: false}).addTo(map);
     note.textContent = duplicates.has(p[2]) || result.routes.length > 1
       ? 'Blue line: candidate route(s) matched by ID. This ID is not unique; the match to this point is uncertain.'
-      : 'Blue line: historical route matched by habitation ID. It may include non-road segments and is not validated for navigation.';
+      : `Blue line: historical route matched by habitation ID.${destination ? ` Destination matched to PMGSY: ${destination[3] || 'Unnamed'} (${destination[4] || 'category unknown'}); not necessarily a healthcare facility.` : ' Destination location not independently matched.'} Routes may include non-road segments and are not validated for navigation.`;
   } catch (err) { if (version === selectionVersion) note.textContent = `Could not load route: ${err.message}`; }
 }
 function selectDistrict(id, zoom = false) {
@@ -145,7 +188,8 @@ function selectDistrict(id, zoom = false) {
   if (zoom) map.fitBounds(d.layer.getBounds(), {padding: [20, 20], maxZoom: 11});
   updateSearch();
 }
-map.on('click', event => { const p = pointAt(event.containerPoint); if (p) selectPoint(p); });
+map.on('click', event => { const f = facilityAt(event.containerPoint), p = pointAt(event.containerPoint); if (f) selectFacility(f); else if (p) selectPoint(p); });
+for (const id of ['show-medical', 'show-other']) document.querySelector(`#${id}`).addEventListener('change', () => pointsLayer.schedule());
 document.querySelectorAll('[data-filter]').forEach(box => box.addEventListener('change', () => {
   if (box.checked) filters.add(box.dataset.filter); else filters.delete(box.dataset.filter);
   pointsLayer.schedule();
@@ -226,7 +270,9 @@ districtSelect.addEventListener('change', () => {
   if (districtsById.has(districtSelect.value)) selectDistrict(districtSelect.value, true);
   else { clearSelection(); updateSearch(); }
 });
-Promise.all([fetchJSON('/api/habitations?v=4'), fetchJSON('/districts-2011.geojson?v=4')]).then(([data, boundaries]) => {
+Promise.all([fetchJSON('/api/habitations?v=6'), fetchJSON('/districts-2011.geojson?v=6'), fetchJSON('/api/facilities?v=6')]).then(([data, boundaries, facilityData]) => {
+  facilities = facilityData.facilities;
+  for (const f of facilities) { f.world = map.project([f[0], f[1]], 0); facilitiesById.set(f[2], f); }
   points = data.points; duplicates = new Set(data.duplicate_ids);
   for (const p of points) p.world = map.project([p[0], p[1]], 0);
   const summary = DistrictStats.summarize(points, boundaries.features); districtStats = summary.stats;
@@ -238,7 +284,7 @@ Promise.all([fetchJSON('/api/habitations?v=4'), fetchJSON('/districts-2011.geojs
       const tooltip = document.createElement('span'); tooltip.textContent = `${name} · ${count(stats.total)} records`;
       layer.bindTooltip(tooltip, {sticky: true});
       layer.on('click', e => {
-        const p = pointAt(e.containerPoint); if (p) selectPoint(p); else selectDistrict(id);
+        const f = facilityAt(e.containerPoint), p = pointAt(e.containerPoint); if (f) selectFacility(f); else if (p) selectPoint(p); else selectDistrict(id);
         L.DomEvent.stopPropagation(e.originalEvent);
       });
     }

@@ -60,6 +60,16 @@ def load_points():
                        'source_count': len(reader)}, separators=(',', ':'), allow_nan=False).encode()
 
 
+def load_facilities():
+    reference = json.loads((HERE / 'facility-reference.json').read_text())
+    stem = DATA / 'shortest_road_paths'
+    for suffix, expected in reference['route_sha256'].items():
+        if hashlib.sha256(stem.with_suffix('.' + suffix).read_bytes()).hexdigest() != expected:
+            raise ValueError('Historical routes changed; rebuild facility-reference.json before starting the map')
+    return json.dumps({'facilities': reference['facilities'], 'stats': reference['stats']},
+                      ensure_ascii=False, separators=(',', ':')).encode()
+
+
 def load_routes():
     reader = shapefile.Reader(str(DATA / 'shortest_road_paths'), encoding='utf-8')
     # Store record indices, so geometries and transformed coordinates are loaded only on request.
@@ -175,6 +185,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in FILES:
             name, content_type = FILES[url.path]
             payload = (HERE / name).read_bytes()
+        elif url.path == '/api/facilities':
+            payload, content_type = FACILITIES, 'application/json; charset=utf-8'
         elif url.path == '/api/habitations':
             payload, content_type = POINTS, 'application/json; charset=utf-8'
         elif url.path == '/api/routes-in-view':
@@ -211,8 +223,9 @@ def main():
     parser.add_argument('--host', default='127.0.0.1', help='bind address (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=8000)
     args = parser.parse_args()
-    global POINTS, ROUTES, ROUTE_BOUNDS, ROUTE_WGS_BOUNDS
+    global POINTS, FACILITIES, ROUTES, ROUTE_BOUNDS, ROUTE_WGS_BOUNDS
     POINTS = load_points()
+    FACILITIES = load_facilities()
     ROUTES = load_routes()
     ROUTE_BOUNDS = load_route_bounds()
     ROUTE_WGS_BOUNDS = route_wgs_bounds()
