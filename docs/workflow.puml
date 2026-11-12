@@ -1,0 +1,15 @@
+@startuml
+skinparam monochrome true
+start
+:Load facilities, habitations, and roads;
+:Filter medical facilities and clean geometries;
+:Project to EPSG:7767 and clip roads;
+:Snap points and build road graph;
+:Estimate access to existing facilities;
+:Classify service level at 5 km;
+:DBSCAN clusters of underserved habitations;
+:K-means subclusters and centroid-based proposals;
+:Bridge disconnected components and recalculate distances;
+:Export shapefiles and build dashboard;
+stop
+@enduml
