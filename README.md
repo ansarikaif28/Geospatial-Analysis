@@ -1,10 +1,10 @@
 # Mapping rural healthcare access in Maharashtra
 
-An exploratory geospatial analysis of road-network access from habitations to medical facilities in Maharashtra, followed by a clustering-based assessment of potential new facility locations. The repository contains a cleaned-for-publication copy of the author's Colab notebook, selected historical outputs, a report map image and a PlantUML workflow description. It is a research prototype, **not a validated site-selection or routing system**.
+An exploratory geospatial analysis of road-network access from habitations to medical facilities in Maharashtra, followed by a clustering-based assessment of potential new facility locations. The repository contains a cleaned-for-publication copy of the author's Colab notebook, selected historical outputs and a PlantUML workflow description. It is a research prototype, **not a validated site-selection or routing system**.
 
 ## Repository status
 
-The notebook is preserved as an archival working copy: its code and narrative are unchanged, but saved cell outputs, execution counts and Colab provenance were removed to avoid publishing data samples, transient service URLs and IP addresses. Historical narrative in the notebook can disagree with the code or saved run. The original input layers and interactive HTML map are not included. Two older output shapefiles and a static map extracted from the project report are included for inspection, not as verified inputs to this notebook. A fresh end-to-end run has **not** been verified; use the reconciliation checklist below before execution.
+The notebook is preserved as an archival working copy: its code and narrative are unchanged, but saved cell outputs, execution counts and Colab provenance were removed to avoid publishing data samples, transient service URLs and IP addresses. Historical narrative in the notebook can disagree with the code or saved run. The original input layers and interactive HTML map are not included. Two older output shapefiles are included for inspection, not as verified inputs to this notebook. A fresh end-to-end run has **not** been verified; use the reconciliation checklist below before execution.
 
 ## Method
 
@@ -36,11 +36,10 @@ Shapefiles are multi-file datasets: keep matching `.shp`, `.shx`, `.dbf`, and `.
 
 The original input shapefiles and several notebook outputs were not found in the Drive search. The two historical shapefiles included below are not verified substitutes for the current run. Obtain the original inputs and check their licence and permission before using or sharing them.
 
-### Included historical outputs and map
+### Included historical outputs
 
 - [`results/historical-network/habitations_with_path_info.shp`](results/historical-network/habitations_with_path_info.shp): 85,990 points, with `HAB_ID`, `path_found`, `nearest_fa`, `path_len_m` and `reason_no_`. The older layer lacks the `path_type` field used by the current dashboard.
 - [`results/historical-network/shortest_road_paths.shp`](results/historical-network/shortest_road_paths.shp): 51,506 polylines, with `HAB_ID`, `FACILITY_I` and `path_len_m`. Both layers have a WGS 84 / Maharashtra projection file and matching `.shx`, `.dbf`, `.prj` and `.cpg` sidecars. They come from the same older Drive folder, but their generation method and compatibility with this notebook's later run are unknown; do not silently rename or substitute them. Open them in QGIS or read them with GeoPandas using the `.shp` paths.
-- [`maps/report-composite-map.jpeg`](maps/report-composite-map.jpeg) is the original embedded image extracted from page 20 of the project final report in Drive, captioned in the preceding page as a composite map. It is a static screenshot, not the notebook's complete interactive Folium output, and cannot reproduce its layer controls or dashboard. The screenshot does not retain a visible legend, scale or basemap attribution. Verify the basemap provider and its attribution requirements before reuse; the notebook's map code specifies CartoDB Positron, but the report image's exact provenance has not been independently established.
 
 ### Data sources and attribution
 
@@ -50,7 +49,7 @@ DataMeet provides state archives for [habitations](https://github.com/datameet/p
 
 > Ministry of Rural Development, 2022. PMGSY Rural Connectivity Datasets, https://geosadak-pmgsy.nic.in/opendata/. Published under India's [Government Open Data License](https://data.gov.in/government-open-data-license-india).
 
-Consult the [upstream README](https://github.com/datameet/pmgsy-geosadak#readme) and [archived terms](https://github.com/datameet/pmgsy-geosadak/blob/master/PMGSY-TnC-archived.html) for attribution and reuse conditions. Check any additional rights for the actual road source and basemap once identified. No licence or specific GitHub origin is asserted for unknown inputs or for the report screenshot. The historical shapefiles are analysis outputs, not copies of the raw GitHub archives.
+Consult the [upstream README](https://github.com/datameet/pmgsy-geosadak#readme) and [archived terms](https://github.com/datameet/pmgsy-geosadak/blob/master/PMGSY-TnC-archived.html) for attribution and reuse conditions. Check any additional rights for the actual road source and basemap once identified. No licence or specific GitHub origin is asserted for unknown inputs. The historical shapefiles are analysis outputs, not copies of the raw GitHub archives.
 
 ## Setup and execution
 
