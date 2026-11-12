@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b36">
+  <title>Maharashtra Healthcare Access | Historical network explorer</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Map controls and information">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><span>FIELDNOTES <small> / GEOSPATIAL ANALYSIS</small></span></div>
+      <div class="intro">
+        <div class="eyebrow"><span class="status-dot"></span> HISTORICAL NETWORK OUTPUT</div>
+        <h1>Mapping access<br>to <em>healthcare.</em></h1>
+        <p>Explore recorded habitation-to-facility paths across Maharashtra’s historical network outputs.</p>
+      </div>
+      <div class="notice"><strong>Research prototype</strong> · Historic outputs with unverified provenance. Routes and distances are not validated for navigation or planning.</div>
+      <section aria-labelledby="overview-title">
+        <div class="section-head"><h2 id="overview-title">THE DATASET</h2><span>01 / OVERVIEW</span></div>
+        <div class="stats"><div><strong id="total">—</strong><span>habitations</span></div><div><strong id="routes-count">—</strong><span>paths found</span></div><div><strong id="missing-count">—</strong><span>no path found</span></div></div>
+      </section>
+      <section aria-labelledby="layers-title">
+        <div class="section-head"><h2 id="layers-title">EXPLORE THE MAP</h2><span>02 / FILTER</span></div>
+        <p class="helper">Filter by recorded path distance. Click a point for details and its matching route.</p>
+        <div class="filters">
+          <label><input type="checkbox" data-filter="within" checked><i class="swatch within"></i><span>Within 5 km</span><b id="count-within">—</b></label>
+          <label><input type="checkbox" data-filter="beyond" checked><i class="swatch beyond"></i><span>Beyond 5 km</span><b id="count-beyond">—</b></label>
+          <label><input type="checkbox" data-filter="missing" checked><i class="swatch missing"></i><span>No path found</span><b id="count-missing">—</b></label>
+          <label id="unknown-filter" hidden><input type="checkbox" data-filter="unknown" checked><i class="swatch unknown"></i><span>Distance unavailable</span><b id="count-unknown">—</b></label>
+        </div>
+        <form id="search-form" class="search"><label for="search">FIND A HABITATION</label><div><input id="search" inputmode="numeric" placeholder="Enter habitation ID" autocomplete="off"><button type="submit">Find <span aria-hidden="true">↗</span></button></div><p id="search-message" role="status"></p></form>
+      </section>
+      <div class="sidebar-footer">5 km is a distance threshold, not a measure of service quality. <a href="https://github.com/ansarikaif28/Geospatial-Analysis" target="_blank" rel="noopener noreferrer">Project repository ↗</a></div>
+    </aside>
+    <main class="map-area">
+      <div id="map" aria-label="Interactive map of historical habitation paths"></div>
+      <div class="map-header"><div><span>MAHARASHTRA, INDIA</span><strong>Healthcare accessibility</strong></div><button id="reset" aria-label="Reset map view">⤢ <span>Reset view</span></button></div>
+      <div id="loading" class="loading" role="status">Loading historical shapefiles…</div>
+      <div id="selection" class="selection" hidden aria-live="polite"></div>
+      <div class="map-caption"><span class="caption-dot"></span> HISTORICAL DATA <span class="separator">/</span> <span id="visible-count">Loading…</span></div>
+    </main>
+  </div>
+</body>
+</html>

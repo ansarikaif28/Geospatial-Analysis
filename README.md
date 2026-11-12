@@ -4,7 +4,7 @@ An exploratory geospatial analysis of road-network access from habitations to me
 
 ## Repository status
 
-The notebook is preserved as an archival working copy: its code and narrative are unchanged, but saved cell outputs, execution counts and Colab provenance were removed to avoid publishing data samples, transient service URLs and IP addresses. Historical narrative in the notebook can disagree with the code or saved run. The original input layers and interactive HTML map are not included. Two older output shapefiles are included for inspection, not as verified inputs to this notebook. A fresh end-to-end run has **not** been verified; use the reconciliation checklist below before execution.
+The notebook is preserved as an archival working copy: its code and narrative are unchanged, but saved cell outputs, execution counts and Colab provenance were removed to avoid publishing data samples, transient service URLs and IP addresses. Historical narrative in the notebook can disagree with the code or saved run. The original input layers and original interactive HTML map are not included. Two older output shapefiles and a new interactive explorer built from them are included for inspection, not as verified inputs to this notebook. A fresh end-to-end run has **not** been verified; use the reconciliation checklist below before execution.
 
 ## Method
 
@@ -40,6 +40,25 @@ The original input shapefiles and several notebook outputs were not found in the
 
 - [`results/historical-network/habitations_with_path_info.shp`](results/historical-network/habitations_with_path_info.shp): 85,990 points, with `HAB_ID`, `path_found`, `nearest_fa`, `path_len_m` and `reason_no_`. The older layer lacks the `path_type` field used by the current dashboard.
 - [`results/historical-network/shortest_road_paths.shp`](results/historical-network/shortest_road_paths.shp): 51,506 polylines, with `HAB_ID`, `FACILITY_I` and `path_len_m`. Both layers have a WGS 84 / Maharashtra projection file and matching `.shx`, `.dbf`, `.prj` and `.cpg` sidecars. They come from the same older Drive folder, but their generation method and compatibility with this notebook's later run are unknown; do not silently rename or substitute them. Open them in QGIS or read them with GeoPandas using the `.shp` paths.
+
+### Explore the historical outputs on a map
+
+The [historical network explorer](maps/) is a newly created, read-only visualization of the two included shapefiles, **not** the missing original Folium/Gradio dashboard. It displays all valid habitation points and loads a matching historical route when a point is selected. Filter the points by recorded distance or search by `HAB_ID`; zoom in before selecting a point in a dense area. A blue line is a route matched by ID, not a guarantee of navigability. The data contain duplicate habitation IDs, so route matches for those IDs are explicitly marked uncertain. Some path-found points have no matching route geometry. No facility, proposal, administrative boundary or service-level output layer is inferred from these files.
+
+To run locally from the repository root, with Python 3.10 or newer and pip:
+
+```bash
+python -m venv .venv
+# Activate the environment: source .venv/bin/activate (Windows: .venv\Scripts\activate)
+python -m pip install pyshp==3.1.8 pyproj==3.7.2
+python maps/serve_map.py
+```
+
+Open `http://127.0.0.1:8000/` in your browser. Use Ctrl+C to stop the server. The server reads the original projected shapefiles and transforms coordinates to WGS 84 for display; it binds to the local machine by default and has no authentication. Do not expose it publicly without appropriate controls. Leaflet is included locally; the basemap requests tiles from OpenStreetMap and requires internet access (and communicates the map viewport to the tile provider). Without tiles, the points and routes remain usable against a plain background. The map itself requires the server and cannot be opened directly as a standalone HTML file. Leaflet is distributed under its included [BSD 2-Clause license](maps/vendor/leaflet/LICENSE).
+
+Run the data/API smoke tests with `python -m unittest discover -s tests -v` after installing those dependencies.
+
+Counts in the sidebar are counts of records, not deduplicated settlements: 49,843 with a found path at or below 5 km, 1,760 with a found path above 5 km, and 34,387 with no path found. A missing path is not evidence that a facility is inaccessible. Distances and path flags are inherited from the older files; their calculation and source data have not been independently validated. This explorer does not recreate the notebook's proposal scenario, and its results should not be treated as a current assessment or used for navigation or site selection.
 
 ### Data sources and attribution
 
